@@ -1,0 +1,111 @@
+/* TOAST NOTIFICATION STYLES */
+
+.toast-container {
+  position: fixed;
+  bottom: var(--spacing-lg);
+  right: var(--spacing-lg);
+  z-index: var(--z-notification);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  max-width: 400px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--bg-glass-dark);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(251, 191, 36, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: slideInRight var(--transition-base), slideOutRight 0.3s ease-in 3.7s forwards;
+  color: var(--text-primary);
+  min-height: 56px;
+}
+
+.toast-success {
+  border-color: var(--success);
+  background: rgba(16, 185, 129, 0.1);
+
+  .toast-icon {
+    color: var(--success);
+  }
+}
+
+.toast-error {
+  border-color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+
+  .toast-icon {
+    color: var(--danger);
+  }
+}
+
+.toast-warning {
+  border-color: var(--warning);
+  background: rgba(245, 158, 11, 0.1);
+
+  .toast-icon {
+    color: var(--warning);
+  }
+}
+
+.toast-info {
+  border-color: var(--accent);
+  background: rgba(251, 191, 36, 0.1);
+
+  .toast-icon {
+    color: var(--accent);
+  }
+}
+
+.toast-icon {
+  font-weight: 700;
+  font-size: var(--font-lg);
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  font-weight: 500;
+  font-size: var(--font-sm);
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  font-size: var(--font-lg);
+  flex-shrink: 0;
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+@keyframes slideOutRight {
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 768px) {
+  .toast-container {
+    bottom: var(--spacing-md);
+    right: var(--spacing-md);
+    left: var(--spacing-md);
+    max-width: none;
+  }
+
+  .toast {
+    width: 100%;
+  }
+}

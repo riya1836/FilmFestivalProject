@@ -1,0 +1,19 @@
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 80px);
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.6), rgba(0,0,0,0.9));
+}
+.login-card {
+  background: rgba(255,255,255,0.06);
+  padding: 28px;
+  width: 360px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  color: #fff;
+  text-align: center;
+}
+.login-form input { display:block; width:100%; margin:10px 0; padding:10px; border-radius:6px; border:none; }
+.error { color: #ff6b6b; }
+.demo-creds { margin-top:10px; font-size:12px; color:#ddd; }

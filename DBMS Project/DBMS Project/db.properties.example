@@ -1,0 +1,3 @@
+db.url=jdbc:mysql://localhost:3306/film_festival
+db.user=your_mysql_username
+db.password=your_mysql_password
