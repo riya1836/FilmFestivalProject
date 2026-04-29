@@ -1,11 +1,13 @@
 import './Layout.css';
 import { Sidebar } from './Sidebar';
 import { useLocation } from 'react-router-dom';
-import { isAuthenticated } from '../../auth';
+import { useContext } from 'react';
+import { AuthContext } from '../../contexts/AuthContext';
 
 export const Layout = ({ children }) => {
   const loc = useLocation();
-  const showSidebar = isAuthenticated() && loc.pathname !== '/login';
+  const { user } = useContext(AuthContext);
+  const showSidebar = !!user && loc.pathname !== '/login';
 
   return (
     <div className="app-layout">

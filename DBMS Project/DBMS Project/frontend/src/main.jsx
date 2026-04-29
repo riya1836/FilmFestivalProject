@@ -2,7 +2,6 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/global.css'
 import './styles/pages.css'
-import './index.css'
 import App from './App.jsx'
 
 function renderErrorOverlay(err) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { Link } from 'react-router-dom';
 import { AuthContext } from '../../contexts/AuthContext';
 import './dashboards.css';
 
@@ -26,41 +27,28 @@ export const AdminDashboard = () => {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // Get jury assignments
-      const assignRes = await fetch('http://localhost:8080/api/admin/jury-assignments', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (assignRes.ok) {
-        setJuryAssignments(await assignRes.json());
-      }
+      const headers = { 'Authorization': `Bearer ${token}` };
 
-      // Get award eligible films
-      const awardRes = await fetch('http://localhost:8080/api/admin/award-eligible', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (awardRes.ok) {
-        const films = await awardRes.json();
-        setAwardEligibleFilms(films);
-      }
+      const [filmsRes, assignRes, awardRes, evalRes] = await Promise.all([
+        fetch('http://localhost:8080/api/films', { headers }),
+        fetch('http://localhost:8080/api/admin/jury-assignments', { headers }),
+        fetch('http://localhost:8080/api/admin/award-eligible', { headers }),
+        fetch('http://localhost:8080/api/admin/evaluations', { headers }),
+      ]);
 
-      // Get all evaluations
-      const evalRes = await fetch('http://localhost:8080/api/admin/evaluations', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (evalRes.ok) {
-        const evaluations = await evalRes.json();
-        setStats((prev) => ({
-          ...prev,
-          evaluationsCount: evaluations.length,
-        }));
-      }
+      const films = filmsRes.ok ? await filmsRes.json() : [];
+      const assignments = assignRes.ok ? await assignRes.json() : [];
+      const awards = awardRes.ok ? await awardRes.json() : [];
+      const evaluations = evalRes.ok ? await evalRes.json() : [];
 
-      // TODO: Get counts from database
-      setStats((prev) => ({
-        ...prev,
-        juryMembersCount: juryAssignments.length,
-        awardEligibleCount: awardEligibleFilms.length,
-      }));
+      setJuryAssignments(assignments);
+      setAwardEligibleFilms(awards);
+      setStats({
+        filmsCount: films.length,
+        evaluationsCount: evaluations.length,
+        juryMembersCount: assignments.length,
+        awardEligibleCount: awards.length,
+      });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -102,14 +90,6 @@ export const AdminDashboard = () => {
 
   return (
     <div className="dashboard-page">
-      <nav className="dashboard-navbar">
-        <div className="navbar-brand">🎬 Film Festival Admin</div>
-        <div className="navbar-user">
-          <span>{user?.name}</span>
-          <button onClick={logout} className="logout-btn">Logout</button>
-        </div>
-      </nav>
-
       <div className="dashboard-container">
         <div className="dashboard-tabs">
           <button 
@@ -134,19 +114,54 @@ export const AdminDashboard = () => {
 
         {activeTab === 'overview' && (
           <div className="dashboard-content">
-            <h2>Admin Dashboard</h2>
-            
+            <div className="dashboard-header">
+              <div>
+                <span className="dashboard-badge">Admin Overview</span>
+                <h2>Festival Control Center</h2>
+                <p className="dashboard-subtitle">
+                  Manage films, venues, awards and jury assignments from one polished admin workspace.
+                </p>
+              </div>
+              <div className="dashboard-summary-card">
+                <p className="summary-label">Welcome back, {user?.name || 'Administrator'}</p>
+                <p className="summary-value">Quick actions are ready below.</p>
+              </div>
+            </div>
+
+            <div className="admin-actions-grid">
+              <Link to="/films" className="action-card">
+                <div className="action-title">Manage Films</div>
+                <div className="action-subtitle">Create, edit and delete festival films.</div>
+              </Link>
+              <Link to="/venues" className="action-card">
+                <div className="action-title">Manage Venues</div>
+                <div className="action-subtitle">Add venues and update capacities.</div>
+              </Link>
+              <Link to="/screenings" className="action-card">
+                <div className="action-title">Manage Screenings</div>
+                <div className="action-subtitle">Schedule films for every hall.</div>
+              </Link>
+              <Link to="/awards" className="action-card">
+                <div className="action-title">Manage Awards</div>
+                <div className="action-subtitle">Review award nominees and winners.</div>
+              </Link>
+            </div>
+
             <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-value">{stats.filmsCount}</div>
+                <div className="stat-label">Registered Films</div>
+              </div>
               <div className="stat-card">
                 <div className="stat-value">{stats.evaluationsCount}</div>
                 <div className="stat-label">Total Evaluations</div>
               </div>
               <div className="stat-card">
-                <div className="stat-value">{juryAssignments.length}</div>
+                <div className="stat-value">{stats.juryMembersCount}</div>
                 <div className="stat-label">Jury Assignments</div>
               </div>
               <div className="stat-card">
-                <div className="stat-value">{awardEligibleFilms.length}</div>
+                <div className="stat-value">{stats.awardEligibleCount}</div>
                 <div className="stat-label">Award Eligible Films</div>
               </div>
             </div>
@@ -163,13 +178,21 @@ export const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {juryAssignments.slice(0, 10).map((assign) => (
-                      <tr key={assign.id}>
-                        <td>{assign.jury_id}</td>
-                        <td>{assign.film_title}</td>
-                        <td>{new Date(assign.assigned_at).toLocaleDateString()}</td>
+                    {juryAssignments.length > 0 ? (
+                      juryAssignments.slice(0, 10).map((assign) => (
+                        <tr key={assign.id ?? `${assign.jury_id}-${assign.film_id}`}>
+                          <td>{assign.jury_id}</td>
+                          <td>{assign.film_title || 'Untitled Film'}</td>
+                          <td>{assign.assigned_at ? new Date(assign.assigned_at).toLocaleDateString() : 'TBD'}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="3" className="no-data">
+                          No jury assignments available yet.
+                        </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>

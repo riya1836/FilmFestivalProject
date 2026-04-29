@@ -32,7 +32,9 @@ function App() {
             path="/admin-dashboard"
             element={
               <RoleBasedRoute requiredRoles={['ADMIN']}>
-                <AdminDashboard />
+                <Layout>
+                  <AdminDashboard />
+                </Layout>
               </RoleBasedRoute>
             }
           />
@@ -41,7 +43,9 @@ function App() {
             path="/user-dashboard"
             element={
               <RoleBasedRoute requiredRoles={['USER']}>
-                <UserDashboard />
+                <Layout>
+                  <UserDashboard />
+                </Layout>
               </RoleBasedRoute>
             }
           />
@@ -50,7 +54,9 @@ function App() {
             path="/jury-dashboard"
             element={
               <RoleBasedRoute requiredRoles={['JURY']}>
-                <JuryDashboard />
+                <Layout>
+                  <JuryDashboard />
+                </Layout>
               </RoleBasedRoute>
             }
           />
@@ -65,12 +71,15 @@ function App() {
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/" element={<Home />} />
                     <Route path="/films" element={<Films />} />
-                    <Route path="/attendees" element={<Attendees />} />
-                    <Route path="/awards" element={<Awards />} />
-                    <Route path="/filmcrew" element={<FilmCrew />} />
-                    <Route path="/screenings" element={<Screenings />} />
-                    <Route path="/tickets" element={<Tickets />} />
-                    <Route path="/venues" element={<Venues />} />
+                    
+                    {/* Admin Only Management Routes */}
+                    <Route path="/attendees" element={<RoleBasedRoute requiredRoles={['ADMIN']}><Attendees /></RoleBasedRoute>} />
+                    <Route path="/awards" element={<RoleBasedRoute requiredRoles={['ADMIN']}><Awards /></RoleBasedRoute>} />
+                    <Route path="/filmcrew" element={<RoleBasedRoute requiredRoles={['ADMIN']}><FilmCrew /></RoleBasedRoute>} />
+                    <Route path="/screenings" element={<RoleBasedRoute requiredRoles={['ADMIN']}><Screenings /></RoleBasedRoute>} />
+                    <Route path="/tickets" element={<RoleBasedRoute requiredRoles={['ADMIN']}><Tickets /></RoleBasedRoute>} />
+                    <Route path="/venues" element={<RoleBasedRoute requiredRoles={['ADMIN']}><Venues /></RoleBasedRoute>} />
+                    
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Layout>

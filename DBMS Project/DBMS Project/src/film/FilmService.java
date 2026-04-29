@@ -37,7 +37,7 @@ public class FilmService {
                                          String sortBy) throws SQLException {
         List<FilmDTO> films = new ArrayList<>();
         StringBuilder sql = new StringBuilder(
-            "SELECT f.film_id, f.title, f.runtime, f.language, f.genre, " +
+            "SELECT f.film_id, f.title, f.duration_minutes AS runtime, f.language, f.genre, " +
             "AVG(e.score) as avg_score, COUNT(e.evaluation_id) as eval_count " +
             "FROM film f " +
             "LEFT JOIN evaluation e ON f.film_id = e.film_id " +
@@ -102,7 +102,7 @@ public class FilmService {
      */
     public static FilmDTO getFilmById(Integer filmId) throws SQLException {
         try (Connection con = DBConnection.getConnection()) {
-            String sql = "SELECT f.film_id, f.title, f.runtime, f.language, f.genre, " +
+            String sql = "SELECT f.film_id, f.title, f.duration_minutes AS runtime, f.language, f.genre, " +
                         "AVG(e.score) as avg_score, COUNT(e.evaluation_id) as eval_count " +
                         "FROM film f " +
                         "LEFT JOIN evaluation e ON f.film_id = e.film_id " +
@@ -139,7 +139,7 @@ public class FilmService {
     public static List<FilmDTO> getTopRatedFilms(Integer limit) throws SQLException {
         List<FilmDTO> films = new ArrayList<>();
         try (Connection con = DBConnection.getConnection()) {
-            String sql = "SELECT f.film_id, f.title, f.runtime, f.language, f.genre, " +
+            String sql = "SELECT f.film_id, f.title, f.duration_minutes AS runtime, f.language, f.genre, " +
                         "AVG(e.score) as avg_score, COUNT(e.evaluation_id) as eval_count " +
                         "FROM film f " +
                         "JOIN evaluation e ON f.film_id = e.film_id " +
@@ -177,7 +177,7 @@ public class FilmService {
     public static List<FilmDTO> getAwardEligibleFilms() throws SQLException {
         List<FilmDTO> films = new ArrayList<>();
         try (Connection con = DBConnection.getConnection()) {
-            String sql = "SELECT f.film_id, f.title, f.runtime, f.language, f.genre, " +
+            String sql = "SELECT f.film_id, f.title, f.duration_minutes AS runtime, f.language, f.genre, " +
                         "AVG(e.score) as avg_score, COUNT(e.evaluation_id) as eval_count " +
                         "FROM film f " +
                         "JOIN evaluation e ON f.film_id = e.film_id " +
@@ -206,5 +206,113 @@ public class FilmService {
         }
 
         return films;
+    }
+
+    /**
+     * Create a new film
+     */
+    public static FilmDTO createFilm(String title, String director, String genre,
+                                     String description, Integer duration, Integer year,
+                                     String country, String language) throws SQLException {
+        if (title == null || title.isBlank()) {
+            throw new SQLException("Title is required");
+        }
+        if (genre == null || genre.isBlank()) {
+            throw new SQLException("Genre is required");
+        }
+        if (duration == null || duration <= 0) {
+            throw new SQLException("Valid duration is required");
+        }
+
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO film (title, director, genre, description, " +
+                        "duration_minutes, release_year, country, language) " +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, title);
+            ps.setString(2, director);
+            ps.setString(3, genre);
+            ps.setString(4, description);
+            ps.setInt(5, duration);
+            ps.setObject(6, year);
+            ps.setString(7, country);
+            ps.setString(8, language);
+
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected == 0) {
+                throw new SQLException("Failed to create film");
+            }
+
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    Integer filmId = rs.getInt(1);
+                    return new FilmDTO(filmId, title, duration, language, genre);
+                }
+            }
+        }
+
+        throw new SQLException("Failed to create film");
+    }
+
+    /**
+     * Update an existing film
+     */
+    public static FilmDTO updateFilm(Integer filmId, String title, String director,
+                                     String genre, String description, Integer duration,
+                                     Integer year, String country, String language) throws SQLException {
+        if (filmId == null) {
+            throw new SQLException("Film ID is required");
+        }
+        if (title == null || title.isBlank()) {
+            throw new SQLException("Title is required");
+        }
+        if (genre == null || genre.isBlank()) {
+            throw new SQLException("Genre is required");
+        }
+        if (duration == null || duration <= 0) {
+            throw new SQLException("Valid duration is required");
+        }
+
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE film SET title = ?, director = ?, genre = ?, " +
+                        "description = ?, duration_minutes = ?, release_year = ?, " +
+                        "country = ?, language = ?, updated_at = CURRENT_TIMESTAMP " +
+                        "WHERE film_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setString(1, title);
+            ps.setString(2, director);
+            ps.setString(3, genre);
+            ps.setString(4, description);
+            ps.setInt(5, duration);
+            ps.setObject(6, year);
+            ps.setString(7, country);
+            ps.setString(8, language);
+            ps.setInt(9, filmId);
+
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected == 0) {
+                return null; // Film not found
+            }
+
+            return getFilmById(filmId);
+        }
+    }
+
+    /**
+     * Delete a film
+     */
+    public static boolean deleteFilm(Integer filmId) throws SQLException {
+        if (filmId == null) {
+            throw new SQLException("Film ID is required");
+        }
+
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM film WHERE film_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, filmId);
+
+            int rowsAffected = ps.executeUpdate();
+            return rowsAffected > 0;
+        }
     }
 }

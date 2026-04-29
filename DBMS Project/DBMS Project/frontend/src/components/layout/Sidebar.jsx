@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useContext } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { AuthContext } from '../../contexts/AuthContext';
 import './Sidebar.css';
 
 export const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useContext(AuthContext);
 
-  const navItems = [
-    { path: '/', icon: '🏠', label: 'Dashboard' },
+  const adminItems = [
+    { path: '/admin-dashboard', icon: '📊', label: 'Admin Panel' },
     { path: '/films', icon: '🎬', label: 'Films' },
     { path: '/venues', icon: '🎪', label: 'Venues' },
     { path: '/screenings', icon: '📽️', label: 'Screenings' },
@@ -18,6 +20,24 @@ export const Sidebar = () => {
     { path: '/awards', icon: '🏆', label: 'Awards' },
   ];
 
+  const userItems = [
+    { path: '/user-dashboard', icon: '📱', label: 'My Dashboard' },
+    { path: '/films', icon: '🎬', label: 'Browse Films' },
+  ];
+
+  const juryItems = [
+    { path: '/jury-dashboard', icon: '⚖️', label: 'Jury Panel' },
+    { path: '/films', icon: '🎬', label: 'Films' },
+  ];
+
+  const getNavItems = () => {
+    if (!user) return [];
+    if (user.role === 'ADMIN') return adminItems;
+    if (user.role === 'JURY') return juryItems;
+    return userItems;
+  };
+
+  const navItems = getNavItems();
   const isActive = (path) => location.pathname === path;
 
   return (
@@ -58,6 +78,10 @@ export const Sidebar = () => {
             <span className="footer-icon">⚙️</span>
             <span>Settings</span>
           </Link>
+          <div className="footer-item logout" onClick={() => { logout(); navigate('/login'); }}>
+            <span className="footer-icon">🚪</span>
+            <span>Logout</span>
+          </div>
         </div>
       </aside>
 

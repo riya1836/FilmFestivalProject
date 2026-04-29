@@ -167,3 +167,43 @@
     width: 100%;
   }
 }
+
+/* === AWARD SUGGESTIONS === */
+.page-section {
+  margin-bottom: 2.5rem;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-secondary, #cbd5e1);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.35em 0.8em;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.badge.accent {
+  background: linear-gradient(135deg, #fbbf24, #f97316);
+  color: #1a0a00;
+}
+
+.film-card.highlight {
+  border: 1.5px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.04);
+  transition: all 0.2s ease;
+}
+
+.film-card.highlight:hover {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.15);
+  transform: translateY(-3px);
+}

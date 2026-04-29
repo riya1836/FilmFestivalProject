@@ -1,45 +1,66 @@
-import { useEffect, useState } from 'react';
-import { getScreenings, createScreening, updateScreening, deleteScreening } from '../api';
+import React, { useEffect, useState } from 'react';
+import { getScreenings, createScreening, updateScreening, deleteScreening, getFilms, getVenues } from '../api';
+import { Card, CardBody } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Modal, useModal } from '../components/ui/Modal';
+import { Input, Select } from '../components/ui/Input';
+import { showToast } from '../components/ui/Toast';
 
 function Screenings() {
   const [screenings, setScreenings] = useState([]);
+  const [films, setFilms] = useState([]);
+  const [venues, setVenues] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editingScreening, setEditingScreening] = useState(null);
-  const [formData, setFormData] = useState({ screening_id: '', film_id: '', venue_id: '', screening_time: '' });
-  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState('');
+  const formModal = useModal();
+  const [editingScreening, setEditingScreening] = useState(null);
+  const [formData, setFormData] = useState({ 
+    screening_id: '', 
+    film_id: '', 
+    venue_id: '', 
+    screening_date: '', 
+    start_time: '', 
+    end_time: '', 
+    ticket_price: '' 
+  });
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    async function loadScreenings() {
-      setLoading(true);
-      setFetchError('');
-      try {
-        const data = await getScreenings();
-        setScreenings(Array.isArray(data) ? data.map(s => ({ ...s, id: s.screening_id })) : []);
-      } catch (error) {
-        setFetchError(error.message || 'Unable to load screenings');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadScreenings();
+    loadData();
   }, []);
 
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [screeningsData, filmsData, venuesData] = await Promise.all([
+        getScreenings(),
+        getFilms(),
+        getVenues()
+      ]);
+      setScreenings(Array.isArray(screeningsData) ? screeningsData.map(s => ({ ...s, id: s.screening_id })) : []);
+      setFilms(Array.isArray(filmsData) ? filmsData : []);
+      setVenues(Array.isArray(venuesData) ? venuesData : []);
+    } catch (error) {
+      showToast('Failed to load screenings', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredScreenings = screenings.filter(screening =>
-    screening.film_id.toString().includes(searchTerm) ||
-    screening.venue_id.toString().includes(searchTerm) ||
-    screening.screening_time.includes(searchTerm)
+    (screening.film_title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (screening.venue_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (screening.screening_date || '').includes(searchTerm)
   );
 
   const validateForm = () => {
     const newErrors = {};
-    if (formData.screening_id && Number(formData.screening_id) <= 0) newErrors.screening_id = 'ID must be a positive number';
-    if (!formData.film_id || Number(formData.film_id) <= 0) newErrors.film_id = 'Valid film ID is required';
-    if (!formData.venue_id || Number(formData.venue_id) <= 0) newErrors.venue_id = 'Valid venue ID is required';
-    if (!formData.screening_time.trim()) newErrors.screening_time = 'Screening time is required';
+    if (!formData.film_id) newErrors.film_id = 'Select a film';
+    if (!formData.venue_id) newErrors.venue_id = 'Select a venue';
+    if (!formData.screening_date) newErrors.screening_date = 'Date is required';
+    if (!formData.start_time) newErrors.start_time = 'Start time is required';
+    if (!formData.end_time) newErrors.end_time = 'End time is required';
+    if (!formData.ticket_price || Number(formData.ticket_price) <= 0) newErrors.ticket_price = 'Price is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -51,181 +72,221 @@ function Screenings() {
     const payload = {
       film_id: Number(formData.film_id),
       venue_id: Number(formData.venue_id),
-      screening_time: formData.screening_time,
+      screening_date: formData.screening_date,
+      start_time: formData.start_time.length === 5 ? formData.start_time + ':00' : formData.start_time,
+      end_time: formData.end_time.length === 5 ? formData.end_time + ':00' : formData.end_time,
+      ticket_price: Number(formData.ticket_price),
     };
     if (formData.screening_id) payload.screening_id = Number(formData.screening_id);
 
     try {
       if (editingScreening) {
-        const updated = await updateScreening(editingScreening.id, payload);
-        setScreenings(screenings.map(s => (s.id === editingScreening.id ? { ...updated, id: updated.screening_id } : s)));
+        await updateScreening(editingScreening.id, payload);
+        showToast('Screening updated successfully', 'success');
       } else {
-        const created = await createScreening(payload);
-        setScreenings(prev => [...prev, { ...created, id: created.screening_id }]);
+        await createScreening(payload);
+        showToast('Screening created successfully', 'success');
       }
+      await loadData();
       handleCloseModal();
     } catch (error) {
-      setFetchError(error.message || 'Unable to save screening');
+      showToast(error.message || 'Failed to save screening', 'error');
     }
   };
 
   const handleEdit = (screening) => {
     setEditingScreening(screening);
-    setFormData({ screening_id: screening.id, film_id: screening.film_id, venue_id: screening.venue_id, screening_time: screening.screening_time });
-    setShowModal(true);
+    setFormData({ 
+      screening_id: screening.id, 
+      film_id: screening.film_id, 
+      venue_id: screening.venue_id, 
+      screening_date: screening.screening_date,
+      start_time: screening.start_time,
+      end_time: screening.end_time,
+      ticket_price: screening.ticket_price
+    });
+    formModal.open();
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this screening?')) return;
-
+    if (!window.confirm('Delete this screening?')) return;
     try {
       await deleteScreening(id);
-      setScreenings(screenings.filter(s => s.id !== id));
+      showToast('Screening deleted successfully', 'success');
+      await loadData();
     } catch (error) {
-      setFetchError(error.message || 'Unable to delete screening');
+      showToast('Failed to delete screening', 'error');
     }
   };
 
   const handleCloseModal = () => {
-    setShowModal(false);
+    formModal.close();
     setEditingScreening(null);
-    setFormData({ screening_id: '', film_id: '', venue_id: '', screening_time: '' });
+    setFormData({ screening_id: '', film_id: '', venue_id: '', screening_date: '', start_time: '', end_time: '', ticket_price: '' });
     setErrors({});
   };
 
   const handleAddNew = () => {
     setEditingScreening(null);
-    setFormData({ screening_id: '', film_id: '', venue_id: '', screening_time: '' });
-    setShowModal(true);
+    setFormData({ screening_id: '', film_id: '', venue_id: '', screening_date: '', start_time: '', end_time: '', ticket_price: '' });
+    formModal.open();
   };
 
   return (
-    <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2><i className="fas fa-calendar-alt text-primary me-2"></i>Screenings Management</h2>
-        <button className="btn btn-primary" onClick={handleAddNew}>
-          <i className="fas fa-plus me-2"></i>Add Screening
-        </button>
+    <div className="page-films">
+      <div className="page-header">
+        <div className="page-header-content">
+          <h1 className="page-title">
+            <span className="page-icon">📽️</span>
+            Screenings
+          </h1>
+          <p className="page-subtitle">Schedule and manage film screenings</p>
+        </div>
       </div>
 
-      <div className="mb-3">
-        <input
-          type="text"
-          className="form-control"
-          placeholder="Search screenings by film ID, venue ID, or time..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
-
-      {fetchError && (
-        <div className="alert alert-danger" role="alert">
-          {fetchError}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-center py-4">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </div>
-        </div>
-      ) : (
-        <div className="row">
-        {filteredScreenings.map(screening => (
-          <div key={screening.id} className="col-md-6 col-lg-4 mb-3">
-            <div className="card h-100">
-              <div className="card-body">
-                <h5 className="card-title">Film #{screening.film_id}</h5>
-                <p className="card-text">
-                  <strong>ID:</strong> {screening.screening_id}<br/>
-                  <strong>Venue ID:</strong> {screening.venue_id}<br/>
-                  <strong>Time:</strong> {screening.screening_time}
-                </p>
-                <div className="d-flex gap-2">
-                  <button className="btn btn-outline-primary btn-sm" onClick={() => handleEdit(screening)}>
-                    <i className="fas fa-edit me-1"></i>Edit
-                  </button>
-                  <button className="btn btn-outline-danger btn-sm" onClick={() => handleDelete(screening.id)}>
-                    <i className="fas fa-trash me-1"></i>Delete
-                  </button>
-                </div>
-              </div>
+      <div className="page-content">
+        <div className="page-toolbar">
+          <div className="toolbar-left">
+            <div className="search-box">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="🔍 Search screenings..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
-        ))}
-      </div>
-      )}
-
-      {filteredScreenings.length === 0 && (
-        <div className="text-center mt-4">
-          <i className="fas fa-calendar-alt fa-3x text-muted mb-3"></i>
-          <p className="text-muted">No screenings found. {searchTerm ? 'Try adjusting your search.' : 'Add your first screening!'}</p>
-        </div>
-      )}
-
-      {/* Modal */}
-      {showModal && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">{editingScreening ? 'Edit Screening' : 'Add Screening'}</h5>
-                <button type="button" className="btn-close" onClick={handleCloseModal}></button>
-              </div>
-              <form onSubmit={handleSubmit}>
-                <div className="modal-body">
-                  <div className="mb-3">
-                    <label className="form-label">Screening ID (optional)</label>
-                    <input
-                      type="number"
-                      className={`form-control ${errors.screening_id ? 'is-invalid' : ''}`}
-                      value={formData.screening_id}
-                      onChange={(e) => setFormData({...formData, screening_id: e.target.value})}
-                      disabled={Boolean(editingScreening)}
-                    />
-                    {errors.screening_id && <div className="invalid-feedback">{errors.screening_id}</div>}
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Film ID *</label>
-                    <input
-                      type="number"
-                      className={`form-control ${errors.film_id ? 'is-invalid' : ''}`}
-                      value={formData.film_id}
-                      onChange={(e) => setFormData({...formData, film_id: e.target.value})}
-                    />
-                    {errors.film_id && <div className="invalid-feedback">{errors.film_id}</div>}
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Venue ID *</label>
-                    <input
-                      type="number"
-                      className={`form-control ${errors.venue_id ? 'is-invalid' : ''}`}
-                      value={formData.venue_id}
-                      onChange={(e) => setFormData({...formData, venue_id: e.target.value})}
-                    />
-                    {errors.venue_id && <div className="invalid-feedback">{errors.venue_id}</div>}
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Screening Time *</label>
-                    <input
-                      type="datetime-local"
-                      className={`form-control ${errors.screening_time ? 'is-invalid' : ''}`}
-                      value={formData.screening_time}
-                      onChange={(e) => setFormData({...formData, screening_time: e.target.value})}
-                    />
-                    {errors.screening_time && <div className="invalid-feedback">{errors.screening_time}</div>}
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">{editingScreening ? 'Update' : 'Add'} Screening</button>
-                </div>
-              </form>
-            </div>
+          <div className="toolbar-right">
+            <Button variant="primary" onClick={handleAddNew} icon="➕">
+              Add Screening
+            </Button>
           </div>
         </div>
-      )}
+
+        {loading ? (
+          <div className="loading-skeleton">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="skeleton-card"></div>
+            ))}
+          </div>
+        ) : filteredScreenings.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📽️</div>
+            <h3>No screenings found</h3>
+            <Button variant="primary" onClick={handleAddNew}>Add Screening</Button>
+          </div>
+        ) : (
+          <div className="films-grid">
+            {filteredScreenings.map(screening => (
+              <Card key={screening.id} hoverable className="film-card">
+                <div className="film-poster">📽️</div>
+                <CardBody>
+                  <h3 className="film-title">{screening.film_title || `Film #${screening.film_id}`}</h3>
+                  <div className="film-meta">
+                    <div className="meta-item">
+                      <span className="label">Venue</span>
+                      <span className="value">{screening.venue_name || screening.venue_id}</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="label">Date</span>
+                      <span className="value">{screening.screening_date}</span>
+                    </div>
+                  </div>
+                  <div className="film-meta">
+                    <div className="meta-item">
+                      <span className="label">Time</span>
+                      <span className="value">{screening.start_time.substring(0, 5)} - {screening.end_time.substring(0, 5)}</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="label">Price</span>
+                      <span className="badge">${screening.ticket_price}</span>
+                    </div>
+                  </div>
+                  <div className="film-actions">
+                    <Button variant="secondary" size="sm" onClick={() => handleEdit(screening)} icon="✏️">Edit</Button>
+                    <Button variant="danger" size="sm" onClick={() => handleDelete(screening.id)} icon="🗑️">Delete</Button>
+                  </div>
+                </CardBody>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Modal
+        isOpen={formModal.isOpen}
+        onClose={handleCloseModal}
+        title={editingScreening ? '✏️ Edit Screening' : '➕ Add Screening'}
+        footer={
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button variant="ghost" onClick={handleCloseModal}>Cancel</Button>
+            <Button variant="primary" onClick={handleSubmit}>
+              {editingScreening ? 'Update' : 'Create'}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleSubmit} className="form-grid">
+          <Select
+            label="Select Film"
+            value={formData.film_id}
+            onChange={(e) => setFormData({...formData, film_id: e.target.value})}
+            error={errors.film_id}
+            required
+            options={[
+              { value: '', label: '-- Select Film --' },
+              ...films.map(f => ({ value: f.film_id, label: f.title }))
+            ]}
+          />
+          <Select
+            label="Select Venue"
+            value={formData.venue_id}
+            onChange={(e) => setFormData({...formData, venue_id: e.target.value})}
+            error={errors.venue_id}
+            required
+            options={[
+              { value: '', label: '-- Select Venue --' },
+              ...venues.map(v => ({ value: v.venue_id, label: v.name }))
+            ]}
+          />
+          <Input
+            label="Screening Date"
+            type="date"
+            value={formData.screening_date}
+            onChange={(e) => setFormData({...formData, screening_date: e.target.value})}
+            error={errors.screening_date}
+            required
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Input
+              label="Start Time"
+              type="time"
+              value={formData.start_time}
+              onChange={(e) => setFormData({...formData, start_time: e.target.value})}
+              error={errors.start_time}
+              required
+            />
+            <Input
+              label="End Time"
+              type="time"
+              value={formData.end_time}
+              onChange={(e) => setFormData({...formData, end_time: e.target.value})}
+              error={errors.end_time}
+              required
+            />
+          </div>
+          <Input
+            label="Ticket Price ($)"
+            type="number"
+            step="0.01"
+            value={formData.ticket_price}
+            onChange={(e) => setFormData({...formData, ticket_price: e.target.value})}
+            error={errors.ticket_price}
+            required
+          />
+        </form>
+      </Modal>
     </div>
   );
 }

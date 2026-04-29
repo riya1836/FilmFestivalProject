@@ -85,14 +85,6 @@ export const JuryDashboard = () => {
 
   return (
     <div className="dashboard-page">
-      <nav className="dashboard-navbar">
-        <div className="navbar-brand">🎬 Film Festival - Jury</div>
-        <div className="navbar-user">
-          <span>{user?.name}</span>
-          <button onClick={logout} className="logout-btn">Logout</button>
-        </div>
-      </nav>
-
       <div className="dashboard-container">
         <div className="dashboard-tabs">
           <button 
@@ -169,14 +161,14 @@ export const JuryDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {evaluations.map((eval) => (
-                      <tr key={eval.evaluation_id}>
-                        <td>{eval.film_title}</td>
+                    {evaluations.map((evaluation) => (
+                      <tr key={evaluation.evaluation_id}>
+                        <td>{evaluation.film_title}</td>
                         <td>
-                          <strong className="score-badge">{eval.score}/10</strong>
+                          <strong className="score-badge">{evaluation.score}/10</strong>
                         </td>
-                        <td>{eval.remarks || '-'}</td>
-                        <td>{new Date(eval.created_at).toLocaleDateString()}</td>
+                        <td>{evaluation.remarks || '-'}</td>
+                        <td>{new Date(evaluation.created_at).toLocaleDateString()}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -1,4 +1,4 @@
 @echo off
-cd /d "c:\Users\HP\OneDrive\Desktop\DBMS Project"
-"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root --password=tejal0416 film_festival < db_migration_rbac_clean.sql
+cd /d "%~dp0"
+"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root --password=root123 film_festival < db_migration_rbac_clean.sql
 pause

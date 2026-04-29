@@ -107,7 +107,7 @@ ALTER TABLE ticket ADD INDEX idx_attendee_id (attendee_id);
 -- Password: admin123 (pre-hashed with SHA-256)
 INSERT INTO users (user_id, name, email, password_hash, role, is_active)
 VALUES (1, 'System Admin', 'admin@filmfestival.com',
-        'AQIDBAUGBwgJCgsMDQ4PEBdbZdHCrj8nhRfyagc/as0+3o9CnDZlUrLMlu/PTC13', 'ADMIN', TRUE)
+        'jCvZqIhlGT1SZvtTou6DbJG1QlqSshvyCpOA7N/bqNX/DgknwdtwD3/KrYTMY9Bc', 'ADMIN', TRUE)
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
     password_hash = VALUES(password_hash),

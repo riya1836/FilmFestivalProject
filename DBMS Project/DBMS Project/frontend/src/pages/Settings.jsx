@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { logout } from '../auth';
+import { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../contexts/AuthContext';
 import './Settings.css';
 import { Button } from '../components/ui/Button';
 
 function Settings() {
   const [dark, setDark] = useState(document.body.classList.contains('dark'));
+  const navigate = useNavigate();
+  const { logout } = useContext(AuthContext);
 
   const toggleTheme = () => {
     document.body.classList.toggle('dark');
@@ -13,7 +16,7 @@ function Settings() {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/login';
+    navigate('/login');
   };
 
   return (

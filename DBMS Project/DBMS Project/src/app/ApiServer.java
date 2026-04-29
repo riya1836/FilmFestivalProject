@@ -21,6 +21,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -414,23 +415,84 @@ public class ApiServer {
         }
 
         String method = exchange.getRequestMethod();
-        if ("GET".equals(method) && "my-bookings".equals(action)) {
+
+        if ("POST".equals(method) && "book-ticket".equals(action)) {
+            bookTicket(exchange, auth.userId);
+        } else if ("GET".equals(method) && "my-bookings".equals(action)) {
             getMyBookings(exchange, auth.userId);
         } else {
             sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
         }
     }
 
+    private static void bookTicket(HttpExchange exchange, Integer userId) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+
+        Integer screeningId = parseInt(body.get("screening_id"), null);
+        String seatNumber = body.get("seat_number");
+
+        if (screeningId == null) {
+            sendJson(exchange, HttpURLConnection.HTTP_BAD_REQUEST, errorJson("Missing screening_id"));
+            return;
+        }
+
+        try (Connection con = DBConnection.getConnection()) {
+            // Get attendee_id for user
+            int attendeeId;
+            String sqlA = "SELECT attendee_id FROM attendee WHERE user_id = ?";
+            PreparedStatement psA = con.prepareStatement(sqlA);
+            psA.setInt(1, userId);
+            try (ResultSet rsA = psA.executeQuery()) {
+                if (rsA.next()) attendeeId = rsA.getInt(1);
+                else {
+                    // Create attendee record if missing
+                    String sqlC = "INSERT INTO attendee (user_id) VALUES (?)";
+                    PreparedStatement psC = con.prepareStatement(sqlC, Statement.RETURN_GENERATED_KEYS);
+                    psC.setInt(1, userId);
+                    psC.executeUpdate();
+                    try (ResultSet rsC = psC.getGeneratedKeys()) {
+                        rsC.next();
+                        attendeeId = rsC.getInt(1);
+                    }
+                }
+            }
+
+            // Get price from screening
+            double price = 0;
+            String sqlS = "SELECT ticket_price FROM screening WHERE screening_id = ?";
+            PreparedStatement psS = con.prepareStatement(sqlS);
+            psS.setInt(1, screeningId);
+            try (ResultSet rsS = psS.executeQuery()) {
+                if (rsS.next()) price = rsS.getDouble(1);
+            }
+
+            // Create ticket
+            String sqlT = "INSERT INTO ticket (screening_id, attendee_id, seat_number, price) VALUES (?, ?, ?, ?)";
+            PreparedStatement psBook = con.prepareStatement(sqlT, Statement.RETURN_GENERATED_KEYS);
+            psBook.setInt(1, screeningId);
+            psBook.setInt(2, attendeeId);
+            psBook.setString(3, seatNumber != null ? seatNumber : "ANY");
+            psBook.setDouble(4, price);
+            psBook.executeUpdate();
+            
+            try (ResultSet rsT = psBook.getGeneratedKeys()) {
+                if (rsT.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_CREATED, toJsonObject(mapOf("success", true, "ticket_id", rsT.getInt(1))));
+                }
+            }
+        }
+    }
+
     private static void getMyBookings(HttpExchange exchange, Integer userId) throws IOException, SQLException {
         try (Connection con = DBConnection.getConnection()) {
-            String sql = "SELECT t.ticket_id, t.screening_id, s.screening_time AS screening_date, " +
+            String sql = "SELECT t.ticket_id, t.screening_id, s.screening_date, " +
                 "f.title, 1 AS seats_count, t.price AS total_price, t.seat_number " +
                 "FROM ticket t " +
                 "JOIN screening s ON t.screening_id = s.screening_id " +
                 "JOIN film f ON s.film_id = f.film_id " +
                 "JOIN attendee a ON t.attendee_id = a.attendee_id " +
                 "WHERE a.user_id = ? " +
-                "ORDER BY s.screening_time DESC";
+                "ORDER BY s.screening_date DESC";
             PreparedStatement ps = con.prepareStatement(sql);
             ps.setInt(1, userId);
 
@@ -453,7 +515,7 @@ public class ApiServer {
         }
     }
 
-    private static void handleFilms(HttpExchange exchange, String subResource,
+        private static void handleFilms(HttpExchange exchange, String subResource,
                                     AuthorizationFilter.AuthResult auth) throws IOException, SQLException {
         String method = exchange.getRequestMethod();
 
@@ -468,20 +530,15 @@ public class ApiServer {
             return;
         }
 
-        if ("POST".equals(method)) {
-            if (!ensureAuthenticated(exchange, auth)) {
-                return;
-            }
-            if (!AuthorizationFilter.hasRole(auth, "ADMIN")) {
-                sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
-                return;
-            }
-            sendJson(exchange, HttpURLConnection.HTTP_NOT_IMPLEMENTED,
-                errorJson("Film creation is not yet implemented in the RBAC API"));
+        if (!ensureAuthenticated(exchange, auth) || !AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
             return;
         }
 
-        sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
+        if ("POST".equals(method)) createFilm(exchange);
+        else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) updateFilm(exchange, Integer.parseInt(subResource));
+        else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) deleteFilm(exchange, Integer.parseInt(subResource));
+        else sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
     }
 
     private static void listAllFilms(HttpExchange exchange) throws IOException, SQLException {
@@ -527,22 +584,19 @@ public class ApiServer {
         sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(result));
     }
 
-    private static void getFilmById(HttpExchange exchange, Integer filmId) throws IOException, SQLException {
-        FilmService.FilmDTO film = FilmService.getFilmById(filmId);
-        if (film == null) {
+    private static void getFilmById(HttpExchange exchange, int id) throws IOException, SQLException {
+        FilmService.FilmDTO film = FilmService.getFilmById(id);
+        if (film != null) {
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                "film_id", film.filmId,
+                "title", film.title,
+                "genre", film.genre,
+                "language", film.language,
+                "runtime", film.runtime
+            )));
+        } else {
             sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Film not found"));
-            return;
         }
-
-        sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
-            "film_id", film.filmId,
-            "title", film.title,
-            "genre", film.genre,
-            "language", film.language,
-            "runtime", film.runtime,
-            "avg_score", film.averageScore,
-            "evaluation_count", film.evaluationCount
-        )));
     }
 
     private static void getTopRatedFilms(HttpExchange exchange) throws IOException, SQLException {
@@ -555,7 +609,6 @@ public class ApiServer {
                 "title", film.title,
                 "genre", film.genre,
                 "language", film.language,
-                "runtime", film.runtime,
                 "avg_score", film.averageScore,
                 "evaluation_count", film.evaluationCount
             ));
@@ -564,35 +617,698 @@ public class ApiServer {
         sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(result));
     }
 
-    private static void handleAttendees(HttpExchange exchange, String id) throws IOException {
-        sendJson(exchange, HttpURLConnection.HTTP_NOT_IMPLEMENTED,
-            errorJson("Legacy attendee endpoints are not wired into the RBAC API yet"));
+    private static void createFilm(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        
+        FilmService.FilmDTO film = FilmService.createFilm(
+            body.get("title"),
+            body.get("director"),
+            body.get("genre"),
+            body.get("description"),
+            parseInt(body.get("runtime"), parseInt(body.get("duration_minutes"), 0)),
+            parseInt(body.get("release_year"), 2024),
+            body.get("country"),
+            body.get("language")
+        );
+        
+        sendJson(exchange, HttpURLConnection.HTTP_CREATED, toJsonObject(mapOf(
+            "film_id", film.filmId,
+            "title", film.title,
+            "genre", film.genre,
+            "language", film.language,
+            "runtime", film.runtime
+        )));
     }
 
-    private static void handleAwards(HttpExchange exchange, String id) throws IOException {
-        sendJson(exchange, HttpURLConnection.HTTP_NOT_IMPLEMENTED,
-            errorJson("Legacy award endpoints are not wired into the RBAC API yet"));
+    private static void updateFilm(HttpExchange exchange, int id) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        
+        FilmService.FilmDTO film = FilmService.updateFilm(
+            id,
+            body.get("title"),
+            body.get("director"),
+            body.get("genre"),
+            body.get("description"),
+            parseInt(body.get("runtime"), parseInt(body.get("duration_minutes"), 0)),
+            parseInt(body.get("release_year"), 2024),
+            body.get("country"),
+            body.get("language")
+        );
+        
+        if (film != null) {
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                "film_id", film.filmId,
+                "title", film.title,
+                "success", true
+            )));
+        } else {
+            sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Film not found"));
+        }
     }
 
-    private static void handleVenues(HttpExchange exchange, String id) throws IOException {
-        sendJson(exchange, HttpURLConnection.HTTP_NOT_IMPLEMENTED,
-            errorJson("Legacy venue endpoints are not wired into the RBAC API yet"));
+    private static void deleteFilm(HttpExchange exchange, int id) throws IOException, SQLException {
+        boolean success = FilmService.deleteFilm(id);
+        if (success) {
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+        } else {
+            sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Film not found"));
+        }
     }
 
-    private static void handleFilmCrew(HttpExchange exchange, String id) throws IOException {
-        sendJson(exchange, HttpURLConnection.HTTP_NOT_IMPLEMENTED,
-            errorJson("Legacy film crew endpoints are not wired into the RBAC API yet"));
+    private static void handleAttendees(HttpExchange exchange, String subResource) throws IOException, SQLException {
+        String method = exchange.getRequestMethod();
+        AuthorizationFilter.AuthResult auth = AuthorizationFilter.authenticate(exchange);
+
+        if ("GET".equals(method)) {
+            if (subResource != null && subResource.matches("\\d+")) getAttendeeById(exchange, Integer.parseInt(subResource));
+            else listAllAttendees(exchange);
+            return;
+        }
+
+        if (!ensureAuthenticated(exchange, auth) || !AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
+            return;
+        }
+
+        if ("POST".equals(method)) createAttendee(exchange);
+        else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) updateAttendee(exchange, Integer.parseInt(subResource));
+        else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) deleteAttendee(exchange, Integer.parseInt(subResource));
+        else sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
+    }
+
+    private static void listAllAttendees(HttpExchange exchange) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT a.*, u.name, u.email FROM attendee a JOIN users u ON a.user_id = u.user_id";
+            PreparedStatement ps = con.prepareStatement(sql);
+            List<Map<String, Object>> attendees = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    attendees.add(mapOf(
+                        "attendee_id", rs.getInt("attendee_id"),
+                        "user_id", rs.getInt("user_id"),
+                        "name", rs.getString("name"),
+                        "email", rs.getString("email")
+                    ));
+                }
+            }
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(attendees));
+        }
+    }
+
+    private static void getAttendeeById(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT a.*, u.name, u.email FROM attendee a JOIN users u ON a.user_id = u.user_id WHERE attendee_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                        "attendee_id", rs.getInt("attendee_id"),
+                        "user_id", rs.getInt("user_id"),
+                        "name", rs.getString("name"),
+                        "email", rs.getString("email")
+                    )));
+                } else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Attendee not found"));
+            }
+        }
+    }
+
+    private static void createAttendee(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO attendee (user_id) VALUES (?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, parseInt(body.get("user_id"), 0));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) getAttendeeById(exchange, rs.getInt(1));
+            }
+        }
+    }
+
+    private static void updateAttendee(HttpExchange exchange, int id) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE attendee SET user_id=? WHERE attendee_id=?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, parseInt(body.get("user_id"), 0));
+            ps.setInt(2, id);
+            if (ps.executeUpdate() > 0) getAttendeeById(exchange, id);
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Attendee not found"));
+        }
+    }
+
+    private static void deleteAttendee(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM attendee WHERE attendee_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            if (ps.executeUpdate() > 0) sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Attendee not found"));
+        }
+    }
+
+    private static void handleAwards(HttpExchange exchange, String subResource) throws IOException, SQLException {
+        String method = exchange.getRequestMethod();
+        AuthorizationFilter.AuthResult auth = AuthorizationFilter.authenticate(exchange);
+
+        if ("GET".equals(method)) {
+            if (subResource != null && subResource.matches("\\d+")) getAwardById(exchange, Integer.parseInt(subResource));
+            else listAllAwards(exchange);
+            return;
+        }
+
+        if (!ensureAuthenticated(exchange, auth) || !AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
+            return;
+        }
+
+        if ("POST".equals(method)) createAward(exchange);
+        else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) updateAward(exchange, Integer.parseInt(subResource));
+        else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) deleteAward(exchange, Integer.parseInt(subResource));
+        else sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
+    }
+
+    private static void listAllAwards(HttpExchange exchange) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT * FROM awards";
+            PreparedStatement ps = con.prepareStatement(sql);
+            List<Map<String, Object>> awards = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    awards.add(mapOf(
+                        "award_id", rs.getInt("award_id"),
+                        "award_name", rs.getString("award_name"),
+                        "film_id", rs.getObject("film_id"),
+                        "crew_id", rs.getObject("crew_id"),
+                        "year", rs.getInt("year")
+                    ));
+                }
+            }
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(awards));
+        }
+    }
+
+    private static void getAwardById(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT * FROM awards WHERE award_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                        "award_id", rs.getInt("award_id"),
+                        "award_name", rs.getString("award_name"),
+                        "film_id", rs.getObject("film_id"),
+                        "crew_id", rs.getObject("crew_id"),
+                        "year", rs.getInt("year")
+                    )));
+                } else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Award not found"));
+            }
+        }
+    }
+
+    private static void createAward(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO awards (award_name, film_id, crew_id, year) VALUES (?, ?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, body.get("award_name"));
+            
+            Integer filmId = parseInt(body.get("film_id"), null);
+            if (filmId != null) ps.setInt(2, filmId); else ps.setNull(2, java.sql.Types.INTEGER);
+            
+            Integer crewId = parseInt(body.get("crew_id"), null);
+            if (crewId != null) ps.setInt(3, crewId); else ps.setNull(3, java.sql.Types.INTEGER);
+            
+            ps.setInt(4, parseInt(body.get("year"), 2024));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) getAwardById(exchange, rs.getInt(1));
+            }
+        }
+    }
+
+    private static void updateAward(HttpExchange exchange, int id) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE awards SET award_name=?, film_id=?, crew_id=?, year=? WHERE award_id=?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setString(1, body.get("award_name"));
+            
+            Integer filmId = parseInt(body.get("film_id"), null);
+            if (filmId != null) ps.setInt(2, filmId); else ps.setNull(2, java.sql.Types.INTEGER);
+            
+            Integer crewId = parseInt(body.get("crew_id"), null);
+            if (crewId != null) ps.setInt(3, crewId); else ps.setNull(3, java.sql.Types.INTEGER);
+            
+            ps.setInt(4, parseInt(body.get("year"), 2024));
+            ps.setInt(5, id);
+            if (ps.executeUpdate() > 0) getAwardById(exchange, id);
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Award not found"));
+        }
+    }
+
+    private static void deleteAward(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM awards WHERE award_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            if (ps.executeUpdate() > 0) sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Award not found"));
+        }
+    }
+
+    private static void handleVenues(HttpExchange exchange, String subResource) throws IOException, SQLException {
+        String method = exchange.getRequestMethod();
+        AuthorizationFilter.AuthResult auth = AuthorizationFilter.authenticate(exchange);
+
+        if ("GET".equals(method)) {
+            if (subResource != null && subResource.matches("\\d+")) getVenueById(exchange, Integer.parseInt(subResource));
+            else listAllVenues(exchange);
+            return;
+        }
+
+        if (!ensureAuthenticated(exchange, auth) || !AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
+            return;
+        }
+
+        if ("POST".equals(method)) createVenue(exchange);
+        else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) updateVenue(exchange, Integer.parseInt(subResource));
+        else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) deleteVenue(exchange, Integer.parseInt(subResource));
+        else sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
+    }
+
+    private static void listAllVenues(HttpExchange exchange) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT * FROM venue";
+            PreparedStatement ps = con.prepareStatement(sql);
+            List<Map<String, Object>> venues = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    venues.add(mapOf(
+                        "venue_id", rs.getInt("venue_id"),
+                        "name", rs.getString("name"),
+                        "location", rs.getString("location"),
+                        "capacity", rs.getInt("capacity")
+                    ));
+                }
+            }
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(venues));
+        }
+    }
+
+    private static void getVenueById(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT * FROM venue WHERE venue_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                        "venue_id", rs.getInt("venue_id"),
+                        "name", rs.getString("name"),
+                        "location", rs.getString("location"),
+                        "capacity", rs.getInt("capacity")
+                    )));
+                } else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Venue not found"));
+            }
+        }
+    }
+
+    private static void createVenue(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO venue (name, location, capacity) VALUES (?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, body.get("name"));
+            ps.setString(2, body.get("location"));
+            ps.setInt(3, parseInt(body.get("capacity"), 0));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) getVenueById(exchange, rs.getInt(1));
+            }
+        }
+    }
+
+    private static void updateVenue(HttpExchange exchange, int id) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE venue SET name=?, location=?, capacity=? WHERE venue_id=?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setString(1, body.get("name"));
+            ps.setString(2, body.get("location"));
+            ps.setInt(3, parseInt(body.get("capacity"), 0));
+            ps.setInt(4, id);
+            if (ps.executeUpdate() > 0) getVenueById(exchange, id);
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Venue not found"));
+        }
+    }
+
+    private static void deleteVenue(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM venue WHERE venue_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            if (ps.executeUpdate() > 0) sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Venue not found"));
+        }
     }
 
     private static void handleScreenings(HttpExchange exchange, String subResource,
-                                         AuthorizationFilter.AuthResult auth) throws IOException {
-        sendJson(exchange, HttpURLConnection.HTTP_NOT_IMPLEMENTED,
-            errorJson("Screening endpoints are not yet implemented in the RBAC API"));
+                                         AuthorizationFilter.AuthResult auth) throws IOException, SQLException {
+        String method = exchange.getRequestMethod();
+
+        if ("GET".equals(method)) {
+            if (subResource != null && subResource.matches("\\d+")) getScreeningById(exchange, Integer.parseInt(subResource));
+            else listAllScreenings(exchange);
+            return;
+        }
+
+        if (!ensureAuthenticated(exchange, auth) || !AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
+            return;
+        }
+
+        if ("POST".equals(method)) createScreening(exchange);
+        else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) updateScreening(exchange, Integer.parseInt(subResource));
+        else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) deleteScreening(exchange, Integer.parseInt(subResource));
+        else sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
     }
 
-    private static void handleTickets(HttpExchange exchange, String id) throws IOException {
-        sendJson(exchange, HttpURLConnection.HTTP_NOT_IMPLEMENTED,
-            errorJson("Legacy ticket endpoints are not wired into the RBAC API yet"));
+    private static void listAllScreenings(HttpExchange exchange) throws IOException, SQLException {
+        // Parse optional film_id query param
+        String query = exchange.getRequestURI().getQuery();
+        Integer filmIdFilter = null;
+        if (query != null) {
+            for (String param : query.split("&")) {
+                String[] kv = param.split("=", 2);
+                if (kv.length == 2 && "film_id".equals(decodeQueryValue(kv[0]))) {
+                    filmIdFilter = parseInt(decodeQueryValue(kv[1]), null);
+                }
+            }
+        }
+
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT s.*, f.title as film_title, v.name as venue_name FROM screening s " +
+                         "JOIN film f ON s.film_id = f.film_id JOIN venue v ON s.venue_id = v.venue_id" +
+                         (filmIdFilter != null ? " WHERE s.film_id = ?" : "") +
+                         " ORDER BY s.screening_date ASC";
+            PreparedStatement ps = con.prepareStatement(sql);
+            if (filmIdFilter != null) ps.setInt(1, filmIdFilter);
+            List<Map<String, Object>> screenings = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    screenings.add(mapOf(
+                        "screening_id", rs.getInt("screening_id"),
+                        "film_id", rs.getInt("film_id"),
+                        "film_title", rs.getString("film_title"),
+                        "venue_id", rs.getInt("venue_id"),
+                        "venue_name", rs.getString("venue_name"),
+                        "screening_date", rs.getDate("screening_date").toString(),
+                        "start_time", rs.getTime("start_time").toString(),
+                        "end_time", rs.getTime("end_time").toString(),
+                        "ticket_price", rs.getBigDecimal("ticket_price")
+                    ));
+                }
+            }
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(screenings));
+        }
+    }
+
+    private static void getScreeningById(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT s.*, f.title as film_title, v.name as venue_name FROM screening s " +
+                         "JOIN film f ON s.film_id = f.film_id JOIN venue v ON s.venue_id = v.venue_id WHERE screening_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                        "screening_id", rs.getInt("screening_id"),
+                        "film_id", rs.getInt("film_id"),
+                        "film_title", rs.getString("film_title"),
+                        "venue_id", rs.getInt("venue_id"),
+                        "venue_name", rs.getString("venue_name"),
+                        "screening_date", rs.getDate("screening_date").toString(),
+                        "start_time", rs.getTime("start_time").toString(),
+                        "end_time", rs.getTime("end_time").toString(),
+                        "ticket_price", rs.getBigDecimal("ticket_price")
+                    )));
+                } else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Screening not found"));
+            }
+        }
+    }
+
+    private static void createScreening(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO screening (film_id, venue_id, screening_date, start_time, end_time, ticket_price) VALUES (?, ?, ?, ?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, parseInt(body.get("film_id"), 0));
+            ps.setInt(2, parseInt(body.get("venue_id"), 0));
+            ps.setDate(3, java.sql.Date.valueOf(body.get("screening_date")));
+            ps.setTime(4, java.sql.Time.valueOf(body.get("start_time")));
+            ps.setTime(5, java.sql.Time.valueOf(body.get("end_time")));
+            ps.setBigDecimal(6, new java.math.BigDecimal(body.get("ticket_price")));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) { int newId = rs.getInt(1); getScreeningById(exchange, newId); }
+            }
+        }
+    }
+
+    private static void updateScreening(HttpExchange exchange, int id) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE screening SET film_id=?, venue_id=?, screening_date=?, start_time=?, end_time=?, ticket_price=? WHERE screening_id=?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, parseInt(body.get("film_id"), 0));
+            ps.setInt(2, parseInt(body.get("venue_id"), 0));
+            ps.setDate(3, java.sql.Date.valueOf(body.get("screening_date")));
+            ps.setTime(4, java.sql.Time.valueOf(body.get("start_time")));
+            ps.setTime(5, java.sql.Time.valueOf(body.get("end_time")));
+            ps.setBigDecimal(6, new java.math.BigDecimal(body.get("ticket_price")));
+            ps.setInt(7, id);
+            if (ps.executeUpdate() > 0) sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Screening not found"));
+        }
+    }
+
+    private static void deleteScreening(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM screening WHERE screening_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            if (ps.executeUpdate() > 0) sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Screening not found"));
+        }
+    }
+
+    private static void handleTickets(HttpExchange exchange, String subResource) throws IOException, SQLException {
+        String method = exchange.getRequestMethod();
+        AuthorizationFilter.AuthResult auth = AuthorizationFilter.authenticate(exchange);
+
+        if ("GET".equals(method)) {
+            if (subResource != null && subResource.matches("\\d+")) getTicketById_Admin(exchange, Integer.parseInt(subResource));
+            else listAllTickets(exchange);
+            return;
+        }
+
+        if (!ensureAuthenticated(exchange, auth) || !AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
+            return;
+        }
+
+        if ("POST".equals(method)) createTicket(exchange);
+        else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) updateTicket(exchange, Integer.parseInt(subResource));
+        else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) deleteTicket(exchange, Integer.parseInt(subResource));
+        else sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
+    }
+
+    private static void listAllTickets(HttpExchange exchange) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT t.*, s.screening_date, f.title as film_title, a.user_id " +
+                         "FROM ticket t JOIN screening s ON t.screening_id = s.screening_id " +
+                         "JOIN film f ON s.film_id = f.film_id JOIN attendee a ON t.attendee_id = a.attendee_id";
+            PreparedStatement ps = con.prepareStatement(sql);
+            List<Map<String, Object>> tickets = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    tickets.add(mapOf(
+                        "ticket_id", rs.getInt("ticket_id"),
+                        "screening_id", rs.getInt("screening_id"),
+                        "attendee_id", rs.getInt("attendee_id"),
+                        "seat_number", rs.getString("seat_number"),
+                        "price", rs.getBigDecimal("price"),
+                        "film_title", rs.getString("film_title"),
+                        "screening_date", rs.getDate("screening_date").toString()
+                    ));
+                }
+            }
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(tickets));
+        }
+    }
+
+    private static void getTicketById_Admin(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT t.*, f.title as film_title FROM ticket t " +
+                         "JOIN screening s ON t.screening_id = s.screening_id " +
+                         "JOIN film f ON s.film_id = f.film_id WHERE ticket_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                        "ticket_id", rs.getInt("ticket_id"),
+                        "screening_id", rs.getInt("screening_id"),
+                        "attendee_id", rs.getInt("attendee_id"),
+                        "seat_number", rs.getString("seat_number"),
+                        "price", rs.getBigDecimal("price"),
+                        "film_title", rs.getString("film_title")
+                    )));
+                } else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Ticket not found"));
+            }
+        }
+    }
+
+    private static void createTicket(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO ticket (screening_id, attendee_id, seat_number, price) VALUES (?, ?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, parseInt(body.get("screening_id"), 0));
+            ps.setInt(2, parseInt(body.get("attendee_id"), 0));
+            ps.setString(3, body.get("seat_number"));
+            ps.setBigDecimal(4, new java.math.BigDecimal(body.get("price")));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) getTicketById_Admin(exchange, rs.getInt(1));
+            }
+        }
+    }
+
+    private static void updateTicket(HttpExchange exchange, int id) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE ticket SET screening_id=?, attendee_id=?, seat_number=?, price=? WHERE ticket_id=?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, parseInt(body.get("screening_id"), 0));
+            ps.setInt(2, parseInt(body.get("attendee_id"), 0));
+            ps.setString(3, body.get("seat_number"));
+            ps.setBigDecimal(4, new java.math.BigDecimal(body.get("price")));
+            ps.setInt(5, id);
+            if (ps.executeUpdate() > 0) getTicketById_Admin(exchange, id);
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Ticket not found"));
+        }
+    }
+
+    private static void deleteTicket(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM ticket WHERE ticket_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            if (ps.executeUpdate() > 0) sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Ticket not found"));
+        }
+    }
+
+    private static void handleFilmCrew(HttpExchange exchange, String subResource) throws IOException, SQLException {
+        String method = exchange.getRequestMethod();
+        AuthorizationFilter.AuthResult auth = AuthorizationFilter.authenticate(exchange);
+
+        if ("GET".equals(method)) {
+            if (subResource != null && subResource.matches("\\d+")) getFilmCrewById(exchange, Integer.parseInt(subResource));
+            else listAllFilmCrew(exchange);
+            return;
+        }
+
+        if (!ensureAuthenticated(exchange, auth) || !AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
+            return;
+        }
+
+        if ("POST".equals(method)) createFilmCrew(exchange);
+        else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) updateFilmCrew(exchange, Integer.parseInt(subResource));
+        else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) deleteFilmCrew(exchange, Integer.parseInt(subResource));
+        else sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
+    }
+
+    private static void listAllFilmCrew(HttpExchange exchange) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT * FROM film_crew";
+            PreparedStatement ps = con.prepareStatement(sql);
+            List<Map<String, Object>> crew = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    crew.add(mapOf(
+                        "crew_id", rs.getInt("crew_id"),
+                        "name", rs.getString("name"),
+                        "role", rs.getString("role"),
+                        "film_id", rs.getInt("film_id")
+                    ));
+                }
+            }
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(crew));
+        }
+    }
+
+    private static void getFilmCrewById(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT * FROM film_crew WHERE crew_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                        "crew_id", rs.getInt("crew_id"),
+                        "name", rs.getString("name"),
+                        "role", rs.getString("role"),
+                        "film_id", rs.getInt("film_id")
+                    )));
+                } else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Film crew member not found"));
+            }
+        }
+    }
+
+    private static void createFilmCrew(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO film_crew (name, role, film_id) VALUES (?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, body.get("name"));
+            ps.setString(2, body.get("role"));
+            ps.setInt(3, parseInt(body.get("film_id"), 0));
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) getFilmCrewById(exchange, rs.getInt(1));
+            }
+        }
+    }
+
+    private static void updateFilmCrew(HttpExchange exchange, int id) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE film_crew SET name=?, role=?, film_id=? WHERE crew_id=?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setString(1, body.get("name"));
+            ps.setString(2, body.get("role"));
+            ps.setInt(3, parseInt(body.get("film_id"), 0));
+            ps.setInt(4, id);
+            if (ps.executeUpdate() > 0) getFilmCrewById(exchange, id);
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Film crew member not found"));
+        }
+    }
+
+    private static void deleteFilmCrew(HttpExchange exchange, int id) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM film_crew WHERE crew_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, id);
+            if (ps.executeUpdate() > 0) sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf("success", true)));
+            else sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Film crew member not found"));
+        }
     }
 
     private static boolean ensureAuthenticated(HttpExchange exchange,
@@ -648,140 +1364,55 @@ public class ApiServer {
     }
 
     private static Map<String, String> parseJson(String json) {
-        Map<String, String> map = new LinkedHashMap<>();
-        if (json == null) {
-            return map;
-        }
-
+        Map<String, String> result = new LinkedHashMap<>();
+        if (json == null || json.isBlank()) return result;
         json = json.trim();
-        if (!json.startsWith("{") || !json.endsWith("}")) {
-            return map;
-        }
-
-        int index = 1;
-        int end = json.length() - 1;
-
-        while (index < end) {
-            index = skipWhitespace(json, index, end);
-            if (index >= end) {
-                break;
-            }
-            if (json.charAt(index) == ',') {
-                index++;
-                continue;
-            }
-            if (json.charAt(index) != '"') {
-                break;
-            }
-
-            StringBuilder keyBuilder = new StringBuilder();
-            index = parseQuotedToken(json, index, keyBuilder);
-            index = skipWhitespace(json, index, end);
-            if (index >= end || json.charAt(index) != ':') {
-                break;
-            }
-
-            index++;
-            index = skipWhitespace(json, index, end);
-            if (index >= end) {
-                break;
-            }
-
-            char current = json.charAt(index);
-            String value;
-            if (current == '"') {
-                StringBuilder valueBuilder = new StringBuilder();
-                index = parseQuotedToken(json, index, valueBuilder);
-                value = valueBuilder.toString();
-            } else if (current == '[' || current == '{') {
-                int start = index;
-                int depth = 0;
-                boolean inString = false;
-
-                while (index < end) {
-                    char c = json.charAt(index);
-                    if (c == '"' && (index == start || json.charAt(index - 1) != '\\')) {
-                        inString = !inString;
-                    } else if (!inString) {
-                        if (c == '[' || c == '{') {
-                            depth++;
-                        } else if (c == ']' || c == '}') {
-                            depth--;
-                            if (depth == 0) {
-                                index++;
-                                break;
-                            }
-                        }
-                    }
-                    index++;
+        if (json.startsWith("{") && json.endsWith("}")) {
+            json = json.substring(1, json.length() - 1);
+            String[] parts = json.split(",");
+            for (String part : parts) {
+                String[] kv = part.split(":");
+                if (kv.length == 2) {
+                    String key = kv[0].trim().replace("\"", "");
+                    String val = kv[1].trim().replace("\"", "");
+                    result.put(key, val);
                 }
-
-                value = json.substring(start, Math.min(index, json.length())).trim();
-            } else {
-                int start = index;
-                while (index < end && json.charAt(index) != ',') {
-                    index++;
-                }
-                value = json.substring(start, index).trim();
-            }
-
-            map.put(keyBuilder.toString(), value);
-            index = skipWhitespace(json, index, end);
-            if (index < end && json.charAt(index) == ',') {
-                index++;
             }
         }
-
-        return map;
+        return result;
     }
 
-    private static int skipWhitespace(String json, int index, int end) {
-        while (index < end && Character.isWhitespace(json.charAt(index))) {
-            index++;
+    private static List<Integer> parseIntegerList(String json) {
+        List<Integer> result = new ArrayList<>();
+        if (json == null || json.isBlank()) return result;
+        json = json.trim().replace("[", "").replace("]", "");
+        for (String part : json.split(",")) {
+            String val = part.trim();
+            if (!val.isEmpty()) result.add(Integer.parseInt(val));
         }
-        return index;
+        return result;
     }
 
-    private static int parseQuotedToken(String json, int index, StringBuilder builder) {
-        index++;
-        while (index < json.length()) {
-            char c = json.charAt(index);
-            if (c == '\\' && index + 1 < json.length()) {
-                index++;
-                builder.append(json.charAt(index));
-            } else if (c == '"') {
-                return index + 1;
-            } else {
-                builder.append(c);
-            }
-            index++;
-        }
-        return index;
+    private static String decodeQueryValue(String value) {
+        return URLDecoder.decode(value, StandardCharsets.UTF_8);
     }
 
-    private static List<Integer> parseIntegerList(String rawValue) {
-        List<Integer> values = new ArrayList<>();
-        if (rawValue == null) {
-            return values;
-        }
+    private static String toIsoString(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant().toString();
+    }
 
-        String normalized = rawValue.trim();
-        if (normalized.startsWith("[") && normalized.endsWith("]")) {
-            normalized = normalized.substring(1, normalized.length() - 1);
-        }
+    private static String escapeJson(String value) {
+        if (value == null) return "";
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t");
+    }
 
-        if (normalized.isBlank()) {
-            return values;
-        }
-
-        for (String part : normalized.split(",")) {
-            Integer parsed = parseInt(part.trim(), null);
-            if (parsed != null) {
-                values.add(parsed);
-            }
-        }
-
-        return values;
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private static String toJsonObject(Map<String, Object> map) {
@@ -849,26 +1480,5 @@ public class ApiServer {
         } catch (Exception ex) {
             return defaultValue;
         }
-    }
-
-    private static String decodeQueryValue(String value) {
-        return URLDecoder.decode(value, StandardCharsets.UTF_8);
-    }
-
-    private static String toIsoString(Timestamp timestamp) {
-        return timestamp == null ? null : timestamp.toInstant().toString();
-    }
-
-    private static String escapeJson(String value) {
-        return value
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t");
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 }

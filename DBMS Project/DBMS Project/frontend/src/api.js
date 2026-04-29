@@ -5,7 +5,7 @@ function getAuthToken() {
   return localStorage.getItem('authToken');
 }
 
-async function request(path, options = {}) {
+export async function request(path, options = {}) {
   console.log('[API Request]', {
     method: options.method || 'GET',
     path,
@@ -55,6 +55,8 @@ async function request(path, options = {}) {
 
   return response.json();
 }
+
+export const fetchApi = request;
 
 // ==================== AUTH ENDPOINTS ====================
 export const register = (name, email, password, role = 'USER') =>
@@ -147,4 +149,3 @@ export const getTickets = () => request('/tickets');
 export const createTicket = (ticket) => request('/tickets', { method: 'POST', body: JSON.stringify(ticket) });
 export const updateTicket = (id, ticket) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(ticket) });
 export const deleteTicket = (id) => request(`/tickets/${id}`, { method: 'DELETE' });
-

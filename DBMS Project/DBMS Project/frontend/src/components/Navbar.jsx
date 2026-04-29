@@ -1,18 +1,19 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { isAuthenticated } from '../auth';
+import { useState, useContext } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { AuthContext } from '../contexts/AuthContext';
 import './Navbar.css';
 
 function Navbar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    // Navigate to Films and broadcast a global search event so pages can react
     const q = searchQuery.trim();
-    if (!isAuthenticated()) {
-      window.location.href = '/login';
+    if (!user) {
+      navigate('/login');
       return;
     }
     navigate('/films');
@@ -24,8 +25,6 @@ function Navbar() {
       window.dispatchEvent(ev);
     }
   };
-
-  const navigate = useNavigate();
 
   return (
     <nav className="navbar">
@@ -59,8 +58,8 @@ function Navbar() {
               <span className="notification-dot"></span>
             </button>
 
-            {!isAuthenticated() && (
-              <a href="/login" className="icon-btn" title="Login">🔐 Login</a>
+            {!user && (
+              <Link to="/login" className="icon-btn" title="Login">🔐 Login</Link>
             )}
           </div>
         </div>

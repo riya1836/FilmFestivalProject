@@ -1,0 +1,193 @@
+    private static void handleTickets(HttpExchange exchange, String subResource) throws IOException, SQLException {
+        String method = exchange.getRequestMethod();
+        AuthorizationFilter.AuthResult auth = AuthorizationFilter.authenticate(exchange);
+
+        if ("GET".equals(method)) {
+            if (subResource != null && subResource.matches("\\d+")) {
+                getTicketById_Admin(exchange, Integer.parseInt(subResource));
+            } else {
+                listAllTickets(exchange);
+            }
+            return;
+        }
+
+        // Admin-only operations
+        if (!ensureAuthenticated(exchange, auth)) {
+            return;
+        }
+        if (!AuthorizationFilter.hasRole(auth, "ADMIN")) {
+            sendJson(exchange, HttpURLConnection.HTTP_FORBIDDEN, errorJson("Admin access required"));
+            return;
+        }
+
+        if ("POST".equals(method)) {
+            createTicket(exchange);
+        } else if ("PUT".equals(method) && subResource != null && subResource.matches("\\d+")) {
+            updateTicket(exchange, Integer.parseInt(subResource));
+        } else if ("DELETE".equals(method) && subResource != null && subResource.matches("\\d+")) {
+            deleteTicket(exchange, Integer.parseInt(subResource));
+        } else {
+            sendJson(exchange, HttpURLConnection.HTTP_BAD_METHOD, errorJson("Method not allowed"));
+        }
+    }
+
+    private static void listAllTickets(HttpExchange exchange) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT t.ticket_id, t.screening_id, t.attendee_id, t.seat_number, t.booking_time, " +
+                        "s.screening_date, s.start_time, s.ticket_price, a.first_name, a.last_name " +
+                        "FROM ticket t " +
+                        "JOIN screening s ON t.screening_id = s.screening_id " +
+                        "JOIN attendee a ON t.attendee_id = a.attendee_id " +
+                        "ORDER BY t.booking_time DESC";
+            PreparedStatement ps = con.prepareStatement(sql);
+
+            List<Map<String, Object>> tickets = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    tickets.add(mapOf(
+                        "ticket_id", rs.getInt("ticket_id"),
+                        "screening_id", rs.getInt("screening_id"),
+                        "attendee_id", rs.getInt("attendee_id"),
+                        "seat_number", rs.getString("seat_number"),
+                        "booking_time", rs.getTimestamp("booking_time").toString(),
+                        "screening_date", rs.getDate("screening_date").toString(),
+                        "start_time", rs.getTime("start_time").toString(),
+                        "price", rs.getBigDecimal("ticket_price"),
+                        "attendee_name", rs.getString("first_name") + " " + rs.getString("last_name")
+                    ));
+                }
+            }
+
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonArray(tickets));
+        }
+    }
+
+    private static void getTicketById_Admin(HttpExchange exchange, Integer ticketId) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "SELECT t.ticket_id, t.screening_id, t.attendee_id, t.seat_number, t.booking_time, " +
+                        "s.screening_date, s.start_time, s.ticket_price, a.first_name, a.last_name " +
+                        "FROM ticket t " +
+                        "JOIN screening s ON t.screening_id = s.screening_id " +
+                        "JOIN attendee a ON t.attendee_id = a.attendee_id " +
+                        "WHERE t.ticket_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, ticketId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                        "ticket_id", rs.getInt("ticket_id"),
+                        "screening_id", rs.getInt("screening_id"),
+                        "attendee_id", rs.getInt("attendee_id"),
+                        "seat_number", rs.getString("seat_number"),
+                        "booking_time", rs.getTimestamp("booking_time").toString(),
+                        "screening_date", rs.getDate("screening_date").toString(),
+                        "start_time", rs.getTime("start_time").toString(),
+                        "price", rs.getBigDecimal("ticket_price"),
+                        "attendee_name", rs.getString("first_name") + " " + rs.getString("last_name")
+                    )));
+                    return;
+                }
+            }
+
+            sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Ticket not found"));
+        }
+    }
+
+    private static void createTicket(HttpExchange exchange) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+
+        Integer screeningId = parseInt(body.get("screening_id"), null);
+        Integer attendeeId = parseInt(body.get("attendee_id"), null);
+        String seatNumber = body.get("seat_number");
+
+        if (screeningId == null || attendeeId == null || isBlank(seatNumber)) {
+            sendJson(exchange, HttpURLConnection.HTTP_BAD_REQUEST,
+                errorJson("Missing required fields: screening_id, attendee_id, seat_number"));
+            return;
+        }
+
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "INSERT INTO ticket (screening_id, attendee_id, seat_number) VALUES (?, ?, ?)";
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, screeningId);
+            ps.setInt(2, attendeeId);
+            ps.setString(3, seatNumber);
+
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected == 0) {
+                sendJson(exchange, HttpURLConnection.HTTP_BAD_REQUEST, errorJson("Failed to create ticket"));
+                return;
+            }
+
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    sendJson(exchange, HttpURLConnection.HTTP_CREATED, toJsonObject(mapOf(
+                        "success", true,
+                        "ticket_id", rs.getInt(1),
+                        "message", "Ticket created successfully"
+                    )));
+                }
+            }
+        } catch (SQLException e) {
+            sendJson(exchange, HttpURLConnection.HTTP_BAD_REQUEST, errorJson(e.getMessage()));
+        }
+    }
+
+    private static void updateTicket(HttpExchange exchange, Integer ticketId) throws IOException, SQLException {
+        Map<String, String> body = parseJson(readRequestBody(exchange));
+
+        Integer screeningId = parseInt(body.get("screening_id"), null);
+        Integer attendeeId = parseInt(body.get("attendee_id"), null);
+        String seatNumber = body.get("seat_number");
+
+        if (screeningId == null || attendeeId == null || isBlank(seatNumber)) {
+            sendJson(exchange, HttpURLConnection.HTTP_BAD_REQUEST,
+                errorJson("Missing required fields: screening_id, attendee_id, seat_number"));
+            return;
+        }
+
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "UPDATE ticket SET screening_id = ?, attendee_id = ?, seat_number = ?, " +
+                        "updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, screeningId);
+            ps.setInt(2, attendeeId);
+            ps.setString(3, seatNumber);
+            ps.setInt(4, ticketId);
+
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected == 0) {
+                sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Ticket not found"));
+                return;
+            }
+
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                "success", true,
+                "message", "Ticket updated successfully"
+            )));
+        } catch (SQLException e) {
+            sendJson(exchange, HttpURLConnection.HTTP_BAD_REQUEST, errorJson(e.getMessage()));
+        }
+    }
+
+    private static void deleteTicket(HttpExchange exchange, Integer ticketId) throws IOException, SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            String sql = "DELETE FROM ticket WHERE ticket_id = ?";
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setInt(1, ticketId);
+
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected == 0) {
+                sendJson(exchange, HttpURLConnection.HTTP_NOT_FOUND, errorJson("Ticket not found"));
+                return;
+            }
+
+            sendJson(exchange, HttpURLConnection.HTTP_OK, toJsonObject(mapOf(
+                "success", true,
+                "message", "Ticket deleted successfully"
+            )));
+        } catch (SQLException e) {
+            sendJson(exchange, HttpURLConnection.HTTP_BAD_REQUEST, errorJson(e.getMessage()));
+        }
+    }

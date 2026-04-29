@@ -1,43 +1,55 @@
-import { useEffect, useState } from 'react';
-import { getTickets, createTicket, updateTicket, deleteTicket, getScreenings, getVenues } from '../api';
+import React, { useEffect, useState } from 'react';
+import { getTickets, createTicket, updateTicket, deleteTicket, getScreenings, getVenues, getAttendees } from '../api';
+import { Card, CardBody } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Modal, useModal } from '../components/ui/Modal';
+import { Input, Select } from '../components/ui/Input';
+import { showToast } from '../components/ui/Toast';
 
 function Tickets() {
   const [tickets, setTickets] = useState([]);
   const [screenings, setScreenings] = useState([]);
   const [venues, setVenues] = useState([]);
+  const [attendees, setAttendees] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSeatSelection, setShowSeatSelection] = useState(false);
   const [occupiedSeats, setOccupiedSeats] = useState([]);
   const [selectedSeat, setSelectedSeat] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [showSeatSelection, setShowSeatSelection] = useState(false);
+  
+  const formModal = useModal();
   const [editingTicket, setEditingTicket] = useState(null);
-  const [formData, setFormData] = useState({ ticket_id: '', screening_id: '', attendee_id: '', seat_number: '', price: '' });
+  const [formData, setFormData] = useState({ 
+    ticket_id: '', 
+    screening_id: '', 
+    attendee_id: '', 
+    seat_number: '' 
+  });
   const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      setFetchError('');
-      try {
-        const [ticketsData, screeningsData, venuesData] = await Promise.all([
-          getTickets(),
-          getScreenings(),
-          getVenues()
-        ]);
-        setTickets(Array.isArray(ticketsData) ? ticketsData.map(t => ({ ...t, id: t.ticket_id })) : []);
-        setScreenings(Array.isArray(screeningsData) ? screeningsData : []);
-        setVenues(Array.isArray(venuesData) ? venuesData : []);
-      } catch (error) {
-        setFetchError(error.message || 'Unable to load data');
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadData();
   }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [ticketsData, screeningsData, venuesData, attendeesData] = await Promise.all([
+        getTickets(),
+        getScreenings(),
+        getVenues(),
+        getAttendees()
+      ]);
+      setTickets(Array.isArray(ticketsData) ? ticketsData.map(t => ({ ...t, id: t.ticket_id })) : []);
+      setScreenings(Array.isArray(screeningsData) ? screeningsData : []);
+      setVenues(Array.isArray(venuesData) ? venuesData : []);
+      setAttendees(Array.isArray(attendeesData) ? attendeesData : []);
+    } catch (error) {
+      showToast('Failed to load data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadOccupiedSeats = (screeningId) => {
     const occupied = tickets
@@ -47,9 +59,8 @@ function Tickets() {
   };
 
   const filteredTickets = tickets.filter(ticket =>
-    ticket.screening_id.toString().includes(searchTerm) ||
-    ticket.attendee_id.toString().includes(searchTerm) ||
-    ticket.seat_number.includes(searchTerm)
+    (ticket.ticket_id || '').toString().includes(searchTerm) ||
+    (ticket.seat_number || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleScreeningChange = (screeningId) => {
@@ -57,10 +68,10 @@ function Tickets() {
     setSelectedSeat(null);
     if (screeningId) {
       loadOccupiedSeats(screeningId);
-      setShowSeatSelection(true); // Automatically show seat selection when screening is selected
+      setShowSeatSelection(true);
     } else {
       setOccupiedSeats([]);
-      setShowSeatSelection(false); // Hide seat selection when no screening is selected
+      setShowSeatSelection(false);
     }
   };
 
@@ -71,363 +82,250 @@ function Tickets() {
 
   const generateSeatMap = () => {
     if (!formData.screening_id) return null;
-
     const screening = screenings.find(s => s.screening_id === Number(formData.screening_id));
     if (!screening) return null;
-
     const venue = venues.find(v => v.venue_id === screening.venue_id);
     if (!venue) return null;
 
-    // Create a more realistic cinema layout based on venue capacity
     const totalSeats = venue.capacity;
-    const seatsPerRow = 12; // 12 seats per row
+    const seatsPerRow = 10;
     const rows = Math.ceil(totalSeats / seatsPerRow);
     
-    const seatMap = [];
-    
-    // Add screen indicator
-    seatMap.push(
-      <div key="screen" className="text-center mb-4">
-        <div style={{ 
-          width: '80%', 
-          height: '20px', 
-          backgroundColor: '#666', 
-          borderRadius: '10px 10px 50px 50px',
-          margin: '0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          fontSize: '12px',
-          fontWeight: 'bold'
-        }}>
-          SCREEN
-        </div>
-      </div>
-    );
-
-    for (let row = 0; row < rows; row++) {
-      const rowSeats = [];
-      const seatsInThisRow = row === rows - 1 ? totalSeats - (row * seatsPerRow) : seatsPerRow;
-      
-      // Add row label
-      rowSeats.push(
-        <span key={`label-${row}`} className="me-2 fw-bold" style={{ width: '20px', textAlign: 'center' }}>
-          {String.fromCharCode(65 + row)}
-        </span>
-      );
-      
-      for (let seat = 1; seat <= seatsInThisRow; seat++) {
-        const seatNumber = `${String.fromCharCode(65 + row)}${seat}`;
-        const isOccupied = occupiedSeats.includes(seatNumber);
-        const isSelected = selectedSeat === seatNumber;
-        
-        rowSeats.push(
-          <button
-            key={seatNumber}
-            className={`btn m-1 ${
-              isOccupied 
-                ? 'btn-danger' 
-                : isSelected 
-                  ? 'btn-success' 
-                  : 'btn-outline-secondary'
-            }`}
-            style={{ 
-              width: '30px', 
-              height: '30px', 
-              fontSize: '9px',
-              padding: '1px',
-              borderRadius: '3px'
-            }}
-            disabled={isOccupied}
-            onClick={() => handleSeatSelect(seatNumber)}
-            title={isOccupied ? 'Occupied' : isSelected ? 'Selected' : `Seat ${seatNumber}`}
-          >
-            {seat}
-          </button>
-        );
-      }
-      
-      seatMap.push(
-        <div key={row} className="d-flex justify-content-center align-items-center mb-1">
-          {rowSeats}
-        </div>
-      );
-    }
-
     return (
-      <div className="mt-3 border rounded p-3 bg-light">
-        <h6 className="text-center mb-3">Select Your Seat</h6>
-        
-        {/* Legend */}
-        <div className="d-flex justify-content-center gap-3 mb-3">
-          <div className="d-flex align-items-center">
-            <div className="btn btn-outline-secondary btn-sm me-1" style={{ width: '20px', height: '20px', padding: '0' }}></div>
-            <small>Available</small>
-          </div>
-          <div className="d-flex align-items-center">
-            <div className="btn btn-success btn-sm me-1" style={{ width: '20px', height: '20px', padding: '0' }}></div>
-            <small>Selected</small>
-          </div>
-          <div className="d-flex align-items-center">
-            <div className="btn btn-danger btn-sm me-1" style={{ width: '20px', height: '20px', padding: '0' }}></div>
-            <small>Occupied</small>
-          </div>
+      <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+        <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>SCREEN</p>
+        <div style={{ height: '4px', background: 'var(--accent)', width: '80%', margin: '0 auto 20px', borderRadius: '4px', boxShadow: '0 0 10px var(--accent)' }}></div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxHeight: '300px', overflowY: 'auto', padding: '10px' }}>
+          {Array.from({ length: totalSeats }).map((_, idx) => {
+            const row = String.fromCharCode(65 + Math.floor(idx / seatsPerRow));
+            const num = (idx % seatsPerRow) + 1;
+            const seatNumber = `${row}${num}`;
+            const isOccupied = occupiedSeats.includes(seatNumber) && (!editingTicket || editingTicket.seat_number !== seatNumber);
+            const isSelected = selectedSeat === seatNumber;
+
+            return (
+              <button
+                key={seatNumber}
+                type="button"
+                onClick={() => handleSeatSelect(seatNumber)}
+                disabled={isOccupied}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  fontSize: '10px',
+                  border: '1px solid var(--border-light)',
+                  background: isOccupied ? 'rgba(239, 68, 68, 0.2)' : isSelected ? 'var(--accent)' : 'transparent',
+                  color: isSelected ? 'black' : 'var(--text-primary)',
+                  cursor: isOccupied ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {seatNumber}
+              </button>
+            );
+          })}
         </div>
-        
-        {/* Seat Map */}
-        <div style={{ 
-          maxHeight: '400px', 
-          overflowY: 'auto',
-          backgroundColor: '#f8f9fa',
-          padding: '20px',
-          borderRadius: '8px'
-        }}>
-          {seatMap}
-        </div>
-        
-        {selectedSeat && (
-          <div className="text-center mt-3">
-            <strong>Selected Seat: {selectedSeat}</strong>
-          </div>
-        )}
       </div>
     );
   };
 
   const validateForm = () => {
     const newErrors = {};
-    if (formData.ticket_id && Number(formData.ticket_id) <= 0) newErrors.ticket_id = 'ID must be a positive number';
-    if (!formData.screening_id || Number(formData.screening_id) <= 0) newErrors.screening_id = 'Valid screening ID is required';
-    if (!formData.attendee_id || Number(formData.attendee_id) <= 0) newErrors.attendee_id = 'Valid attendee ID is required';
-    if (!formData.seat_number.trim()) newErrors.seat_number = 'Seat number is required';
-    if (!formData.price || Number(formData.price) < 0) newErrors.price = 'Valid price is required';
+    if (!formData.screening_id) newErrors.screening_id = 'Select a screening';
+    if (!formData.attendee_id) newErrors.attendee_id = 'Select an attendee';
+    if (!formData.seat_number) newErrors.seat_number = 'Select a seat';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!validateForm()) return;
-
-    const payload = {
-      screening_id: Number(formData.screening_id),
-      attendee_id: Number(formData.attendee_id),
-      seat_number: formData.seat_number,
-      price: Number(formData.price),
-    };
-    if (formData.ticket_id) payload.ticket_id = Number(formData.ticket_id);
 
     try {
       if (editingTicket) {
-        const updated = await updateTicket(editingTicket.id, payload);
-        setTickets(tickets.map(t => (t.id === editingTicket.id ? { ...updated, id: updated.ticket_id } : t)));
+        await updateTicket(editingTicket.id, formData);
+        showToast('Ticket updated successfully', 'success');
       } else {
-        const created = await createTicket(payload);
-        setTickets(prev => [...prev, { ...created, id: created.ticket_id }]);
+        await createTicket(formData);
+        showToast('Ticket created successfully', 'success');
       }
+      await loadData();
       handleCloseModal();
     } catch (error) {
-      setFetchError(error.message || 'Unable to save ticket');
+      showToast(error.message || 'Failed to save ticket', 'error');
     }
   };
 
   const handleEdit = (ticket) => {
     setEditingTicket(ticket);
-    setFormData({ ticket_id: ticket.id, screening_id: ticket.screening_id, attendee_id: ticket.attendee_id, seat_number: ticket.seat_number, price: ticket.price });
+    setFormData({ 
+      ticket_id: ticket.id, 
+      screening_id: ticket.screening_id, 
+      attendee_id: ticket.attendee_id, 
+      seat_number: ticket.seat_number 
+    });
     setSelectedSeat(ticket.seat_number);
     loadOccupiedSeats(ticket.screening_id);
-    setShowModal(true);
+    setShowSeatSelection(true);
+    formModal.open();
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this ticket?')) return;
-
+    if (!window.confirm('Delete this ticket?')) return;
     try {
       await deleteTicket(id);
-      setTickets(tickets.filter(t => t.id !== id));
+      showToast('Ticket deleted successfully', 'success');
+      await loadData();
     } catch (error) {
-      setFetchError(error.message || 'Unable to delete ticket');
+      showToast('Failed to delete ticket', 'error');
     }
   };
 
   const handleCloseModal = () => {
-    setShowModal(false);
+    formModal.close();
     setEditingTicket(null);
-    setFormData({ ticket_id: '', screening_id: '', attendee_id: '', seat_number: '', price: '' });
+    setFormData({ ticket_id: '', screening_id: '', attendee_id: '', seat_number: '' });
+    setSelectedSeat(null);
+    setShowSeatSelection(false);
     setErrors({});
-    setSelectedSeat(null);
-    setOccupiedSeats([]);
-    setShowSeatSelection(false);
-  };
-
-  const handleAddNew = () => {
-    setEditingTicket(null);
-    setFormData({ ticket_id: '', screening_id: '', attendee_id: '', seat_number: '', price: '' });
-    setShowModal(true);
-    setSelectedSeat(null);
-    setOccupiedSeats([]);
-    setShowSeatSelection(false);
   };
 
   return (
-    <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2><i className="fas fa-ticket-alt text-primary me-2"></i>Tickets Management</h2>
-        <button className="btn btn-primary" onClick={handleAddNew}>
-          <i className="fas fa-plus me-2"></i>Add Ticket
-        </button>
+    <div className="page-films">
+      <div className="page-header">
+        <div className="page-header-content">
+          <h1 className="page-title">
+            <span className="page-icon">🎫</span>
+            Tickets
+          </h1>
+          <p className="page-subtitle">Manage film screening bookings</p>
+        </div>
       </div>
 
-      <div className="mb-3">
-        <input
-          type="text"
-          className="form-control"
-          placeholder="Search tickets by screening ID, attendee ID, or seat number..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
-
-      {fetchError && (
-        <div className="alert alert-danger" role="alert">
-          {fetchError}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-center py-4">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </div>
-        </div>
-      ) : (
-        <div className="row">
-        {filteredTickets.map(ticket => (
-          <div key={ticket.id} className="col-md-6 col-lg-4 mb-3">
-            <div className="card h-100">
-              <div className="card-body">
-                <h5 className="card-title">Ticket #{ticket.ticket_id}</h5>
-                <p className="card-text">
-                  <strong>ID:</strong> {ticket.ticket_id}<br/>
-                  <strong>Screening ID:</strong> {ticket.screening_id}<br/>
-                  <strong>Attendee ID:</strong> {ticket.attendee_id}<br/>
-                  <strong>Seat:</strong> {ticket.seat_number}<br/>
-                  <strong>Price:</strong> ${ticket.price}
-                </p>
-                <div className="d-flex gap-2">
-                  <button className="btn btn-outline-primary btn-sm" onClick={() => handleEdit(ticket)}>
-                    <i className="fas fa-edit me-1"></i>Edit
-                  </button>
-                  <button className="btn btn-outline-danger btn-sm" onClick={() => handleDelete(ticket.id)}>
-                    <i className="fas fa-trash me-1"></i>Delete
-                  </button>
-                </div>
-              </div>
+      <div className="page-content">
+        <div className="page-toolbar">
+          <div className="toolbar-left">
+            <div className="search-box">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="🔍 Search tickets..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
-        ))}
-      </div>
-      )}
-
-      {filteredTickets.length === 0 && (
-        <div className="text-center mt-4">
-          <i className="fas fa-ticket-alt fa-3x text-muted mb-3"></i>
-          <p className="text-muted">No tickets found. {searchTerm ? 'Try adjusting your search.' : 'Add your first ticket!'}</p>
+          <div className="toolbar-right">
+            <Button variant="primary" onClick={() => { setEditingTicket(null); formModal.open(); }} icon="➕">
+              Add Ticket
+            </Button>
+          </div>
         </div>
-      )}
 
-      {/* Modal */}
-      {showModal && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">{editingTicket ? 'Edit Ticket' : 'Add Ticket'}</h5>
-                <button type="button" className="btn-close" onClick={handleCloseModal}></button>
-              </div>
-              <form onSubmit={handleSubmit}>
-                <div className="modal-body">
-                  <div className="mb-3">
-                    <label className="form-label">Ticket ID (optional)</label>
-                    <input
-                      type="number"
-                      className={`form-control ${errors.ticket_id ? 'is-invalid' : ''}`}
-                      value={formData.ticket_id}
-                      onChange={(e) => setFormData({...formData, ticket_id: e.target.value})}
-                      disabled={Boolean(editingTicket)}
-                    />
-                    {errors.ticket_id && <div className="invalid-feedback">{errors.ticket_id}</div>}
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Screening *</label>
-                    <select
-                      className={`form-control ${errors.screening_id ? 'is-invalid' : ''}`}
-                      value={formData.screening_id}
-                      onChange={(e) => handleScreeningChange(e.target.value)}
-                    >
-                      <option value="">Select Screening</option>
-                      {screenings.map(screening => (
-                        <option key={screening.screening_id} value={screening.screening_id}>
-                          Film #{screening.film_id} at Venue #{screening.venue_id} - {screening.screening_time}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.screening_id && <div className="invalid-feedback">{errors.screening_id}</div>}
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Attendee ID *</label>
-                    <input
-                      type="number"
-                      className={`form-control ${errors.attendee_id ? 'is-invalid' : ''}`}
-                      value={formData.attendee_id}
-                      onChange={(e) => setFormData({...formData, attendee_id: e.target.value})}
-                    />
-                    {errors.attendee_id && <div className="invalid-feedback">{errors.attendee_id}</div>}
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Seat Selection *</label>
-                    <div className="d-flex gap-2 align-items-center">
-                      <input
-                        type="text"
-                        className={`form-control ${errors.seat_number ? 'is-invalid' : ''}`}
-                        value={formData.seat_number}
-                        readOnly
-                        placeholder="Click on a seat below to select"
-                      />
-                      <button 
-                        type="button" 
-                        className="btn btn-outline-primary"
-                        onClick={() => setShowSeatSelection(!showSeatSelection)}
-                        disabled={!formData.screening_id}
-                      >
-                        {selectedSeat ? 'Change Seat' : (showSeatSelection ? 'Hide Seats' : 'Select Seat')}
-                      </button>
+        {loading ? (
+          <div className="loading-skeleton">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="skeleton-card"></div>
+            ))}
+          </div>
+        ) : filteredTickets.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">🎫</div>
+            <h3>No tickets found</h3>
+            <Button variant="primary" onClick={() => formModal.open()}>Add Ticket</Button>
+          </div>
+        ) : (
+          <div className="films-grid">
+            {filteredTickets.map(ticket => {
+              const screening = screenings.find(s => s.screening_id === Number(ticket.screening_id));
+              const attendee = attendees.find(a => a.attendee_id === Number(ticket.attendee_id));
+              return (
+                <Card key={ticket.id} hoverable className="film-card">
+                  <div className="film-poster">🎫</div>
+                  <CardBody>
+                    <h3 className="film-title">Ticket #{ticket.ticket_id}</h3>
+                    <div className="film-meta">
+                      <div className="meta-item">
+                        <span className="label">Seat</span>
+                        <span className="badge">{ticket.seat_number}</span>
+                      </div>
+                      <div className="meta-item">
+                        <span className="label">Attendee</span>
+                        <span className="value" style={{fontSize: '12px'}}>{attendee?.name || `ID: ${ticket.attendee_id}`}</span>
+                      </div>
                     </div>
-                    {errors.seat_number && <div className="invalid-feedback">{errors.seat_number}</div>}
-                    {showSeatSelection && generateSeatMap()}
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Price *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className={`form-control ${errors.price ? 'is-invalid' : ''}`}
-                      value={formData.price}
-                      onChange={(e) => setFormData({...formData, price: e.target.value})}
-                    />
-                    {errors.price && <div className="invalid-feedback">{errors.price}</div>}
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">{editingTicket ? 'Update' : 'Add'} Ticket</button>
-                </div>
-              </form>
-            </div>
+                    <div className="film-meta">
+                      <div className="meta-item">
+                        <span className="label">Film</span>
+                        <span className="value" style={{fontSize: '12px'}}>{screening?.film_title || `ID: ${screening?.film_id}`}</span>
+                      </div>
+                      <div className="meta-item">
+                        <span className="label">Price</span>
+                        <span className="value">${ticket.price}</span>
+                      </div>
+                    </div>
+                    <div className="film-actions">
+                      <Button variant="secondary" size="sm" onClick={() => handleEdit(ticket)} icon="✏️">Edit</Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDelete(ticket.id)} icon="🗑️">Delete</Button>
+                    </div>
+                  </CardBody>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <Modal
+        isOpen={formModal.isOpen}
+        onClose={handleCloseModal}
+        title={editingTicket ? '✏️ Edit Ticket' : '➕ Add Ticket'}
+        footer={
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button variant="ghost" onClick={handleCloseModal}>Cancel</Button>
+            <Button variant="primary" onClick={handleSubmit}>
+              {editingTicket ? 'Update' : 'Create'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="form-grid">
+          <Select
+            label="Screening"
+            value={formData.screening_id}
+            onChange={(e) => handleScreeningChange(e.target.value)}
+            error={errors.screening_id}
+            required
+            options={[
+              { value: '', label: '-- Select Screening --' },
+              ...screenings.map(s => ({ 
+                value: s.screening_id, 
+                label: `${s.film_title || 'Film '+s.film_id} - ${s.screening_date} ${s.start_time.substring(0,5)}` 
+              }))
+            ]}
+          />
+          <Select
+            label="Attendee"
+            value={formData.attendee_id}
+            onChange={(e) => setFormData({...formData, attendee_id: e.target.value})}
+            error={errors.attendee_id}
+            required
+            options={[
+              { value: '', label: '-- Select Attendee --' },
+              ...attendees.map(a => ({ value: a.attendee_id, label: a.name }))
+            ]}
+          />
+          <div className="form-group">
+            <label>Seat Number: <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{formData.seat_number || 'None selected'}</span></label>
+            {errors.seat_number && <p style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '4px' }}>{errors.seat_number}</p>}
+            {showSeatSelection && generateSeatMap()}
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

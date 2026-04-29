@@ -4,7 +4,7 @@ import './Films.css';
 import { Card, CardBody, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Modal, useModal } from '../components/ui/Modal';
-import { Input, Select } from '../components/ui/Input';
+import { Input, Select, Textarea } from '../components/ui/Input';
 import { showToast } from '../components/ui/Toast';
 
 function Films() {
@@ -21,7 +21,11 @@ function Films() {
     title: '', 
     runtime: '', 
     language: '', 
-    genre: '' 
+    genre: '',
+    director: '',
+    release_year: '',
+    country: '',
+    description: ''
   });
   const [errors, setErrors] = useState({});
 
@@ -75,9 +79,13 @@ function Films() {
 
     const payload = {
       title: formData.title,
-      language: formData.language,
+      director: formData.director.trim() || null,
       genre: formData.genre,
-      runtime: Number(formData.runtime),
+      description: formData.description.trim() || null,
+      duration_minutes: Number(formData.runtime),
+      release_year: formData.release_year ? Number(formData.release_year) : null,
+      country: formData.country.trim() || null,
+      language: formData.language,
     };
     if (formData.film_id) payload.film_id = Number(formData.film_id);
 
@@ -104,7 +112,11 @@ function Films() {
       title: film.title,
       runtime: film.runtime,
       language: film.language,
-      genre: film.genre
+      genre: film.genre,
+      director: film.director || '',
+      release_year: film.release_year || '',
+      country: film.country || '',
+      description: film.description || ''
     });
     formModal.open();
   };
@@ -127,7 +139,17 @@ function Films() {
   };
 
   const resetForm = () => {
-    setFormData({ film_id: '', title: '', runtime: '', language: '', genre: '' });
+    setFormData({
+      film_id: '',
+      title: '',
+      runtime: '',
+      language: '',
+      genre: '',
+      director: '',
+      release_year: '',
+      country: '',
+      description: ''
+    });
     setErrors({});
   };
 
@@ -264,17 +286,17 @@ function Films() {
                         </div>
                         <div className="meta-item">
                           <span className="label">Genre</span>
-                          <span className="badge">{film.genre}</span>
+                          <span className="badge">{film.genre || 'N/A'}</span>
                         </div>
                       </div>
                       <div className="film-meta">
                         <div className="meta-item">
                           <span className="label">Language</span>
-                          <span className="value">{film.language}</span>
+                          <span className="value">{film.language || 'N/A'}</span>
                         </div>
                         <div className="meta-item">
                           <span className="label">Runtime</span>
-                          <span className="value">{film.runtime} min</span>
+                          <span className="value">{film.runtime || 0} min</span>
                         </div>
                       </div>
                       <div className="film-actions">
@@ -315,7 +337,7 @@ function Films() {
                         <CardBody>
                           <h3 className="film-title">{film.title}</h3>
                           <div className="film-meta">
-                            <div className="meta-item"><span className="label">{film.genre}</span></div>
+                            <div className="meta-item"><span className="label">{film.genre || 'N/A'}</span></div>
                           </div>
                         </CardBody>
                       </Card>
@@ -332,9 +354,9 @@ function Films() {
                       <h4>{film.title}</h4>
                       <div className="list-meta">
                         <span>ID: {film.film_id}</span>
-                        <span>Genre: {film.genre}</span>
-                        <span>Language: {film.language}</span>
-                        <span>Runtime: {film.runtime} min</span>
+                        <span>Genre: {film.genre || 'N/A'}</span>
+                        <span>Language: {film.language || 'N/A'}</span>
+                        <span>Runtime: {film.runtime || 0} min</span>
                       </div>
                     </div>
                     <div className="list-actions">
@@ -395,6 +417,13 @@ function Films() {
             required
           />
           <Input
+            label="Director"
+            type="text"
+            placeholder="e.g., Ava Williams"
+            value={formData.director}
+            onChange={(e) => setFormData({...formData, director: e.target.value})}
+          />
+          <Input
             label="Language"
             type="text"
             placeholder="e.g., English, Spanish"
@@ -420,6 +449,26 @@ function Films() {
             onChange={(e) => setFormData({...formData, runtime: e.target.value})}
             error={errors.runtime}
             required
+          />
+          <Input
+            label="Release Year"
+            type="number"
+            placeholder="e.g., 2025"
+            value={formData.release_year}
+            onChange={(e) => setFormData({...formData, release_year: e.target.value})}
+          />
+          <Input
+            label="Country"
+            type="text"
+            placeholder="e.g., USA"
+            value={formData.country}
+            onChange={(e) => setFormData({...formData, country: e.target.value})}
+          />
+          <Textarea
+            label="Description"
+            placeholder="Describe the film..."
+            value={formData.description}
+            onChange={(e) => setFormData({...formData, description: e.target.value})}
           />
         </form>
       </Modal>
