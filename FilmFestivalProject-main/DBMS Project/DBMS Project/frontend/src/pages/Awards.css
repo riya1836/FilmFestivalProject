@@ -1,0 +1,209 @@
+.awards-container {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.awards-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 3rem;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.awards-title {
+  font-size: 2.5rem;
+  font-family: 'Playfair Display', serif;
+  color: #f8fafc;
+  margin: 0;
+  font-weight: 800;
+  background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.awards-subtitle {
+  color: #94a3b8;
+  margin: 0.5rem 0 0 0;
+  font-size: 1rem;
+}
+
+.awards-loading,
+.awards-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: #cbd5e1;
+}
+
+.awards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.award-card {
+  transition: all 0.3s ease-in-out;
+  cursor: default;
+}
+
+.award-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 50px rgba(251, 191, 36, 0.1);
+}
+
+.award-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.award-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.award-name {
+  font-size: 1.25rem;
+  color: #fbbf24;
+  margin: 0 0 0.75rem 0;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.award-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.award-year,
+.award-recipient {
+  font-size: 0.9rem;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.award-year {
+  color: #f97316;
+  font-weight: 500;
+}
+
+.award-recipient {
+  color: #06b6d4;
+}
+
+.award-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(248, 250, 252, 0.1);
+}
+
+.form-actions button {
+  min-width: 120px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .awards-container {
+    padding: 1rem;
+  }
+
+  .awards-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .awards-title {
+    font-size: 2rem;
+  }
+
+  .awards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .award-content {
+    flex-direction: column;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .awards-container {
+    padding: 0.75rem;
+  }
+
+  .awards-title {
+    font-size: 1.5rem;
+  }
+
+  .award-name {
+    font-size: 1.1rem;
+  }
+
+  .awards-header button {
+    width: 100%;
+  }
+}
+
+/* === AWARD SUGGESTIONS === */
+.page-section {
+  margin-bottom: 2.5rem;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-secondary, #cbd5e1);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.35em 0.8em;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.badge.accent {
+  background: linear-gradient(135deg, #fbbf24, #f97316);
+  color: #1a0a00;
+}
+
+.film-card.highlight {
+  border: 1.5px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.04);
+  transition: all 0.2s ease;
+}
+
+.film-card.highlight:hover {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.15);
+  transform: translateY(-3px);
+}

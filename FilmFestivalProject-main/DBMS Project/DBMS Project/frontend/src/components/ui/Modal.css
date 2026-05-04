@@ -1,0 +1,119 @@
+/* MODAL COMPONENT STYLES */
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 14, 39, 0.8);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal-bg);
+  padding: var(--spacing-lg);
+  animation: fadeIn var(--transition-base);
+}
+
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-2xl);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl), 0 0 50px rgba(251, 191, 36, 0.1);
+  animation: slideInUp var(--transition-base);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.modal-sm {
+  width: 100%;
+  max-width: 400px;
+}
+
+.modal-md {
+  width: 100%;
+  max-width: 600px;
+}
+
+.modal-lg {
+  width: 100%;
+  max-width: 900px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xl);
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(135deg, rgba(109, 40, 217, 0.1) 0%, rgba(249, 115, 22, 0.05) 100%);
+
+  h2 {
+    margin: 0;
+    font-size: var(--font-2xl);
+    color: var(--text-primary);
+  }
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-xl);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background: rgba(249, 115, 22, 0.2);
+    color: var(--accent);
+  }
+}
+
+.modal-body {
+  padding: var(--spacing-xl);
+}
+
+.modal-footer {
+  padding: var(--spacing-xl);
+  border-top: 1px solid var(--border-light);
+  background: rgba(109, 40, 217, 0.02);
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .modal {
+    border-radius: var(--radius-xl);
+  }
+
+  .modal-sm, .modal-md, .modal-lg {
+    max-width: 95vw;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: var(--spacing-lg);
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-footer > button {
+    width: 100%;
+  }
+}

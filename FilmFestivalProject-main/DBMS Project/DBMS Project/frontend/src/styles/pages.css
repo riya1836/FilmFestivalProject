@@ -1,0 +1,387 @@
+/* UNIVERSAL PAGES STYLING */
+/* Applied to all page components for consistent modern design */
+
+/* PAGE CONTAINERS */
+.page-content > .container,
+.container-fluid {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  max-width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* LEGACY BOOTSTRAP COMPONENTS - RESTYLE */
+.alert {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid transparent !important;
+  padding: var(--spacing-lg) !important;
+  font-size: var(--font-sm) !important;
+}
+
+.alert-danger {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+.alert-success {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border-color: var(--success) !important;
+  color: var(--success) !important;
+}
+
+.alert-warning {
+  background: rgba(245, 158, 11, 0.1) !important;
+  border-color: var(--warning) !important;
+  color: var(--warning) !important;
+}
+
+.alert-info {
+  background: rgba(251, 191, 36, 0.1) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+/* LEGACY SPINNERS */
+.spinner-border {
+  border-color: rgba(251, 191, 36, 0.2) !important;
+  border-right-color: var(--accent) !important;
+}
+
+/* LEGACY FORMS */
+.form-control,
+.form-select {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-lg) !important;
+  padding: var(--spacing-md) var(--spacing-lg) !important;
+  font-size: var(--font-sm) !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: rgba(61, 63, 76, 0.8) !important;
+  border-color: var(--accent) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1) !important;
+}
+
+.form-control::placeholder {
+  color: var(--text-muted) !important;
+}
+
+.form-label {
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
+  font-size: var(--font-sm) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  margin-bottom: var(--spacing-sm) !important;
+}
+
+/* LEGACY TABLES */
+.table {
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.table > thead > tr > th {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-secondary) !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  padding: var(--spacing-lg) !important;
+  font-size: var(--font-sm) !important;
+}
+
+.table > tbody > tr {
+  border-color: var(--border-color) !important;
+}
+
+.table > tbody > tr > td {
+  padding: var(--spacing-lg) !important;
+  color: var(--text-primary) !important;
+}
+
+.table > tbody > tr:hover {
+  background-color: rgba(109, 40, 217, 0.05) !important;
+}
+
+/* LEGACY BUTTONS */
+.btn {
+  border-radius: var(--radius-lg) !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  font-size: var(--font-xs) !important;
+  transition: all var(--transition-base) !important;
+  padding: var(--spacing-md) var(--spacing-lg) !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--accent-neon) 100%) !important;
+  border-color: transparent !important;
+  color: white !important;
+  box-shadow: var(--shadow-md), var(--glow-purple) !important;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: var(--shadow-lg), var(--glow-purple) !important;
+}
+
+.btn-secondary {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.btn-secondary:hover {
+  background: rgba(109, 40, 217, 0.2) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.btn-danger {
+  background: var(--danger) !important;
+  border-color: transparent !important;
+  color: white !important;
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.8) !important;
+}
+
+.btn-success {
+  background: var(--success) !important;
+  border-color: transparent !important;
+  color: white !important;
+}
+
+.btn-success:hover {
+  background: rgba(16, 185, 129, 0.8) !important;
+}
+
+.btn-warning {
+  background: var(--warning) !important;
+  border-color: transparent !important;
+  color: white !important;
+}
+
+.btn-warning:hover {
+  background: rgba(245, 158, 11, 0.8) !important;
+}
+
+.btn-info {
+  background: var(--info) !important;
+  border-color: transparent !important;
+  color: white !important;
+}
+
+.btn-info:hover {
+  background: rgba(6, 182, 212, 0.8) !important;
+}
+
+.btn-outline-primary {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: transparent !important;
+}
+
+.btn-outline-primary:hover {
+  background: rgba(251, 191, 36, 0.1) !important;
+}
+
+.btn-outline-danger {
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+  background: transparent !important;
+}
+
+.btn-outline-danger:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
+}
+
+.btn-sm {
+  padding: var(--spacing-sm) var(--spacing-md) !important;
+  font-size: var(--font-xs) !important;
+}
+
+/* LEGACY MODALS */
+.modal {
+  --bs-modal-bg: var(--bg-secondary) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+}
+
+.modal-content {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-2xl) !important;
+  box-shadow: var(--shadow-xl), 0 0 50px rgba(251, 191, 36, 0.1) !important;
+}
+
+.modal-header {
+  border-bottom-color: var(--border-light) !important;
+  background: linear-gradient(135deg, rgba(109, 40, 217, 0.1) 0%, rgba(249, 115, 22, 0.05) 100%) !important;
+  padding: var(--spacing-xl) !important;
+}
+
+.modal-body {
+  padding: var(--spacing-xl) !important;
+}
+
+.modal-footer {
+  border-top-color: var(--border-light) !important;
+  background: rgba(109, 40, 217, 0.02) !important;
+  padding: var(--spacing-xl) !important;
+}
+
+.btn-close {
+  filter: brightness(0.8) !important;
+}
+
+.btn-close:hover {
+  filter: brightness(1.2) !important;
+}
+
+/* LEGACY CARDS */
+.card {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-md) !important;
+  transition: all var(--transition-base) !important;
+  color: var(--text-primary) !important;
+}
+
+.card:hover {
+  transform: translateY(-4px) !important;
+  border-color: var(--accent) !important;
+  box-shadow: var(--shadow-lg), var(--glow-accent) !important;
+}
+
+.card-header {
+  background: rgba(109, 40, 217, 0.05) !important;
+  border-bottom-color: var(--border-color) !important;
+  padding: var(--spacing-lg) !important;
+}
+
+.card-body {
+  padding: var(--spacing-lg) !important;
+}
+
+.card-title {
+  color: var(--text-primary) !important;
+  margin: 0 0 var(--spacing-md) 0 !important;
+  font-weight: 700 !important;
+}
+
+.card-text {
+  color: var(--text-secondary) !important;
+}
+
+/* LEGACY MISC */
+.row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.col-md-3,
+.col-md-4,
+.col-md-6,
+.col-lg-3,
+.col-lg-4 {
+  padding-left: var(--spacing-md) !important;
+  padding-right: var(--spacing-md) !important;
+  margin-bottom: var(--spacing-lg) !important;
+}
+
+.mb-3 {
+  margin-bottom: var(--spacing-lg) !important;
+}
+
+.mb-4 {
+  margin-bottom: var(--spacing-xl) !important;
+}
+
+.me-2 {
+  margin-right: var(--spacing-md) !important;
+}
+
+.me-1 {
+  margin-right: var(--spacing-sm) !important;
+}
+
+.d-flex {
+  display: flex !important;
+}
+
+.justify-content-between {
+  justify-content: space-between !important;
+}
+
+.align-items-center {
+  align-items: center !important;
+}
+
+.flex-wrap {
+  flex-wrap: wrap !important;
+}
+
+.gap-2 {
+  gap: var(--spacing-md) !important;
+}
+
+.gap-3 {
+  gap: var(--spacing-lg) !important;
+}
+
+.text-center {
+  text-align: center !important;
+}
+
+.text-muted {
+  color: var(--text-tertiary) !important;
+}
+
+.py-4 {
+  padding-top: var(--spacing-xl) !important;
+  padding-bottom: var(--spacing-xl) !important;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .btn {
+    padding: var(--spacing-sm) var(--spacing-md) !important;
+    font-size: var(--font-xs) !important;
+  }
+
+  .table {
+    font-size: var(--font-sm) !important;
+  }
+
+  .table > thead > tr > th,
+  .table > tbody > tr > td {
+    padding: var(--spacing-md) !important;
+  }
+
+  .col-md-3,
+  .col-md-4,
+  .col-md-6 {
+    padding-left: var(--spacing-sm) !important;
+    padding-right: var(--spacing-sm) !important;
+  }
+
+  .card-header,
+  .card-body,
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: var(--spacing-lg) !important;
+  }
+}
